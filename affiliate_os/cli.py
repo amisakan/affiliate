@@ -224,8 +224,14 @@ def generate_x_posts(
     """登録済み案件から信頼型のX投稿案を生成します。"""
     template = parse_content_template(template)
     offers = filter_offers_by_id(load_offers(data_path), offer_id)
-    scores = score_offers(offers) if with_scores else None
-    drafts = generate_x_posts_for_offers(offers, scores=scores, template=template)
+    score_explanations = explain_scores(offers) if with_scores else None
+    scores = [explanation.score for explanation in score_explanations or []] or None
+    drafts = generate_x_posts_for_offers(
+        offers,
+        scores=scores,
+        score_explanations=score_explanations,
+        template=template,
+    )
     render_x_post_drafts(drafts)
     if offer_id and not drafts:
         console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
@@ -252,8 +258,14 @@ def generate_note_articles(
     """登録済み案件からnote記事下書きを生成します。"""
     template = parse_content_template(template)
     offers = filter_offers_by_id(load_offers(data_path), offer_id)
-    scores = score_offers(offers) if with_scores else None
-    drafts = generate_note_articles_for_offers(offers, scores=scores, template=template)
+    score_explanations = explain_scores(offers) if with_scores else None
+    scores = [explanation.score for explanation in score_explanations or []] or None
+    drafts = generate_note_articles_for_offers(
+        offers,
+        scores=scores,
+        score_explanations=score_explanations,
+        template=template,
+    )
     render_note_article_drafts(drafts)
     if offer_id and not drafts:
         console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
