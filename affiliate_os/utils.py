@@ -10,6 +10,7 @@ from rich.table import Table
 from affiliate_os.compliance import ComplianceReport, OfferComplianceReport
 from affiliate_os.content import ContentPack, NoteArticleDraft, XPostDraft
 from affiliate_os.models import Offer, OfferDraft, format_decimal
+from affiliate_os.reviews import ContentReview
 from affiliate_os.scoring import OfferScore, OfferScoreExplanation
 
 console = Console()
@@ -316,3 +317,31 @@ def render_content_pack(pack: ContentPack) -> None:
     )
     border_style = "green" if pack.passed_compliance else "yellow"
     console.print(Panel(markdown, title="Content Pack", border_style=border_style))
+
+
+def render_content_reviews(reviews: list[ContentReview]) -> None:
+    if not reviews:
+        console.print("[yellow]レビュー対象の生成物がありません。[/yellow]")
+        return
+
+    table = Table(title="Content Reviews")
+    table.add_column("Review ID", style="cyan", no_wrap=True)
+    table.add_column("Type")
+    table.add_column("Offer")
+    table.add_column("Status")
+    table.add_column("Compliance")
+    table.add_column("Score", justify="right")
+    table.add_column("Recommendation")
+
+    for review in reviews:
+        score = "-" if review.score is None else str(review.score)
+        table.add_row(
+            review.review_id,
+            review.content_type,
+            review.offer_id,
+            review.status,
+            review.compliance_status,
+            score,
+            review.recommendation or "-",
+        )
+    console.print(table)
