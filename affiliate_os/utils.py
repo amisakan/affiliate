@@ -8,6 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from affiliate_os.compliance import ComplianceReport, OfferComplianceReport
+from affiliate_os.content import XPostDraft
 from affiliate_os.models import Offer, OfferDraft, format_decimal
 from affiliate_os.scoring import OfferScore
 
@@ -238,3 +239,28 @@ def render_offers_compliance_reports(reports: list[OfferComplianceReport]) -> No
         f"リスクあり: {len(risky_reports)}件 / チェック対象: {len(reports)}件"
         "[/yellow]"
     )
+
+
+def render_x_post_drafts(drafts: list[XPostDraft]) -> None:
+    if not drafts:
+        console.print("[yellow]X投稿生成の対象案件がありません。[/yellow]")
+        return
+
+    for draft in drafts:
+        border_style = "green" if draft.passed_compliance else "yellow"
+        status = "compliance passed" if draft.passed_compliance else "needs compliance review"
+        markdown = "\n".join(
+            [
+                draft.text,
+                "",
+                f"文字数: {len(draft.text)}",
+                f"コンプライアンス: {status}",
+            ]
+        )
+        console.print(
+            Panel(
+                markdown,
+                title=f"{draft.offer_id}: {draft.offer_name}",
+                border_style=border_style,
+            )
+        )

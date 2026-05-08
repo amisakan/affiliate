@@ -175,6 +175,24 @@ uv run python -m affiliate_os check-offers
 uv run python -m affiliate_os check-offers --data-path data/offers.csv
 ```
 
+X投稿案を生成:
+
+```bash
+uv run python -m affiliate_os generate-x-posts
+```
+
+特定の案件だけ生成:
+
+```bash
+uv run python -m affiliate_os generate-x-posts --offer-id OFF-0001
+```
+
+Markdownに保存:
+
+```bash
+uv run python -m affiliate_os generate-x-posts --output-path outputs/generated/x_posts.md
+```
+
 検出対象の例:
 
 - 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」
