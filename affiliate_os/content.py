@@ -5,7 +5,7 @@ from pathlib import Path
 
 from affiliate_os.compliance import ComplianceReport, check_compliance
 from affiliate_os.models import Offer
-from affiliate_os.scoring import OfferScore, score_offers
+from affiliate_os.scoring import OfferScore, OfferScoreExplanation, explain_scores
 
 MAX_X_POST_LENGTH = 280
 DEFAULT_X_POSTS_OUTPUT_PATH = Path("outputs") / "generated" / "x_posts.md"
@@ -22,6 +22,7 @@ class XPostDraft:
     text: str
     compliance_report: ComplianceReport
     score: OfferScore | None = None
+    score_explanation: OfferScoreExplanation | None = None
     template: str = DEFAULT_CONTENT_TEMPLATE
 
     @property
@@ -37,6 +38,7 @@ class NoteArticleDraft:
     markdown: str
     compliance_report: ComplianceReport
     score: OfferScore | None = None
+    score_explanation: OfferScoreExplanation | None = None
     template: str = DEFAULT_CONTENT_TEMPLATE
 
     @property
@@ -61,16 +63,25 @@ class ContentPack:
 def generate_x_post_for_offer(
     offer: Offer,
     score: OfferScore | None = None,
+    score_explanation: OfferScoreExplanation | None = None,
     template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> XPostDraft:
     template = normalize_content_template(template)
-    text = fit_x_post_length(build_x_post_text(offer, score=score, template=template))
+    text = fit_x_post_length(
+        build_x_post_text(
+            offer,
+            score=score,
+            score_explanation=score_explanation,
+            template=template,
+        )
+    )
     return XPostDraft(
         offer_id=offer.offer_id,
         offer_name=offer.offer_name,
         text=text,
         compliance_report=check_compliance(text),
         score=score,
+        score_explanation=score_explanation,
         template=template,
     )
 
@@ -78,13 +89,16 @@ def generate_x_post_for_offer(
 def generate_x_posts_for_offers(
     offers: list[Offer],
     scores: list[OfferScore] | None = None,
+    score_explanations: list[OfferScoreExplanation] | None = None,
     template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> list[XPostDraft]:
     scores_by_offer_id = map_scores_by_offer_id(scores)
+    explanations_by_offer_id = map_score_explanations_by_offer_id(score_explanations)
     return [
         generate_x_post_for_offer(
             offer,
             score=scores_by_offer_id.get(offer.offer_id),
+            score_explanation=explanations_by_offer_id.get(offer.offer_id),
             template=template,
         )
         for offer in offers
@@ -94,11 +108,18 @@ def generate_x_posts_for_offers(
 def generate_note_article_for_offer(
     offer: Offer,
     score: OfferScore | None = None,
+    score_explanation: OfferScoreExplanation | None = None,
     template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> NoteArticleDraft:
     template = normalize_content_template(template)
     title = build_note_article_title(offer, template=template)
-    markdown = build_note_article_markdown(offer, title, score=score, template=template)
+    markdown = build_note_article_markdown(
+        offer,
+        title,
+        score=score,
+        score_explanation=score_explanation,
+        template=template,
+    )
     return NoteArticleDraft(
         offer_id=offer.offer_id,
         offer_name=offer.offer_name,
@@ -106,6 +127,7 @@ def generate_note_article_for_offer(
         markdown=markdown,
         compliance_report=check_compliance(markdown),
         score=score,
+        score_explanation=score_explanation,
         template=template,
     )
 
@@ -113,13 +135,16 @@ def generate_note_article_for_offer(
 def generate_note_articles_for_offers(
     offers: list[Offer],
     scores: list[OfferScore] | None = None,
+    score_explanations: list[OfferScoreExplanation] | None = None,
     template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> list[NoteArticleDraft]:
     scores_by_offer_id = map_scores_by_offer_id(scores)
+    explanations_by_offer_id = map_score_explanations_by_offer_id(score_explanations)
     return [
         generate_note_article_for_offer(
             offer,
             score=scores_by_offer_id.get(offer.offer_id),
+            score_explanation=explanations_by_offer_id.get(offer.offer_id),
             template=template,
         )
         for offer in offers
@@ -133,9 +158,20 @@ def generate_content_pack(
     template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> ContentPack:
     template = normalize_content_template(template)
-    scores = score_offers(offers) if include_scores else None
-    x_posts = generate_x_posts_for_offers(offers, scores=scores, template=template)
-    note_articles = generate_note_articles_for_offers(offers, scores=scores, template=template)
+    score_explanations = explain_scores(offers) if include_scores else None
+    scores = [explanation.score for explanation in score_explanations or []] or None
+    x_posts = generate_x_posts_for_offers(
+        offers,
+        scores=scores,
+        score_explanations=score_explanations,
+        template=template,
+    )
+    note_articles = generate_note_articles_for_offers(
+        offers,
+        scores=scores,
+        score_explanations=score_explanations,
+        template=template,
+    )
     x_posts_path = output_dir / "x_posts.md"
     note_articles_path = output_dir / "note_articles.md"
     compliance_summary_path = output_dir / "compliance_summary.md"
@@ -166,6 +202,14 @@ def map_scores_by_offer_id(scores: list[OfferScore] | None) -> dict[str, OfferSc
     return {score.offer_id: score for score in scores}
 
 
+def map_score_explanations_by_offer_id(
+    explanations: list[OfferScoreExplanation] | None,
+) -> dict[str, OfferScoreExplanation]:
+    if explanations is None:
+        return {}
+    return {explanation.score.offer_id: explanation for explanation in explanations}
+
+
 def normalize_content_template(template: str) -> str:
     normalized = template.strip().lower()
     if normalized not in CONTENT_TEMPLATES:
@@ -177,6 +221,7 @@ def normalize_content_template(template: str) -> str:
 def build_x_post_text(
     offer: Offer,
     score: OfferScore | None = None,
+    score_explanation: OfferScoreExplanation | None = None,
     template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> str:
     template = normalize_content_template(template)
@@ -185,6 +230,7 @@ def build_x_post_text(
     benefit = offer.benefit or "選択肢のひとつとして比較できます"
     caution = build_offer_caution(offer)
     score_note = build_score_note(score)
+    score_reason_note = build_score_reason_note(score_explanation)
 
     if template == "caution":
         text = (
@@ -207,6 +253,8 @@ def build_x_post_text(
         )
     if score_note:
         text += f"\n評価メモ: {score_note}"
+    if score_reason_note:
+        text += f"\n理由: {score_reason_note}"
     return text
 
 
@@ -223,6 +271,7 @@ def build_note_article_markdown(
     offer: Offer,
     title: str,
     score: OfferScore | None = None,
+    score_explanation: OfferScoreExplanation | None = None,
     template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> str:
     template = normalize_content_template(template)
@@ -298,6 +347,10 @@ def build_note_article_markdown(
                 f"- 注意コメント: {score.risk_comment or '特記事項なし'}",
             ]
         )
+    if score_explanation is not None:
+        sections.extend(["", "### 評価理由", ""])
+        for reason in score_explanation.reasons:
+            sections.append(f"- {reason.metric}: {reason.reason}")
     sections.extend(
         [
             "",
@@ -322,6 +375,23 @@ def build_score_note(score: OfferScore | None) -> str:
     return note
 
 
+def build_score_reason_note(explanation: OfferScoreExplanation | None) -> str:
+    if explanation is None:
+        return ""
+
+    prioritized_metrics = ("倫理リスク", "ブランド適合度", "悩みの深さ")
+    reasons_by_metric = {reason.metric: reason for reason in explanation.reasons}
+    selected = [
+        reasons_by_metric[metric]
+        for metric in prioritized_metrics
+        if metric in reasons_by_metric
+    ]
+    if not selected:
+        selected = explanation.reasons[:2]
+    reason_texts = [f"{reason.metric}は{reason.score}/100" for reason in selected[:2]]
+    return "、".join(reason_texts)
+
+
 def build_offer_caution(offer: Offer) -> str:
     cautions = []
     if offer.price is not None:
@@ -342,6 +412,26 @@ def build_offer_caution(offer: Offer) -> str:
 def fit_x_post_length(text: str) -> str:
     if len(text) <= MAX_X_POST_LENGTH:
         return text
+
+    preserved_lines = [
+        line
+        for line in text.splitlines()
+        if line.startswith(("評価メモ:", "理由:"))
+    ]
+    if preserved_lines:
+        body_lines = [
+            line
+            for line in text.splitlines()
+            if not line.startswith(("評価メモ:", "理由:"))
+        ]
+        suffix = "\n詳細条件は公式情報で確認してください。"
+        preserved_text = "\n".join(preserved_lines)
+        tail = f"\n{preserved_text}{suffix}"
+        max_body_length = MAX_X_POST_LENGTH - len(tail)
+        if max_body_length > 40:
+            body = "\n".join(body_lines)
+            trimmed_body = body[:max_body_length].rstrip("、。\n ")
+            return f"{trimmed_body}{tail}"
 
     suffix = "\n詳細条件は公式情報で確認してください。"
     max_body_length = MAX_X_POST_LENGTH - len(suffix)

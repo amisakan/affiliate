@@ -193,7 +193,7 @@ X投稿案を生成:
 uv run python -m affiliate_os generate-x-posts
 ```
 
-スコアリング結果を反映:
+スコアリング結果と主要な評価理由を反映:
 
 ```bash
 uv run python -m affiliate_os generate-x-posts --with-scores
@@ -223,7 +223,7 @@ note記事下書きを生成:
 uv run python -m affiliate_os generate-note-articles
 ```
 
-スコアリング結果を反映:
+スコアリング結果と評価理由を反映:
 
 ```bash
 uv run python -m affiliate_os generate-note-articles --with-scores
@@ -253,7 +253,7 @@ X投稿案、note記事下書き、コンプライアンス概要をまとめて
 uv run python -m affiliate_os generate-content-pack
 ```
 
-スコアリング結果もまとめて反映:
+スコアリング結果と評価理由もまとめて反映:
 
 ```bash
 uv run python -m affiliate_os generate-content-pack --with-scores

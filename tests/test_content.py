@@ -17,7 +17,7 @@ from affiliate_os.content import (
     write_x_posts_markdown,
 )
 from affiliate_os.models import Offer
-from affiliate_os.scoring import score_offer
+from affiliate_os.scoring import explain_score, score_offer
 
 
 def make_offer(
@@ -66,6 +66,42 @@ def test_generate_x_post_can_include_score_context():
     assert draft.score == score
     assert "評価メモ:" in draft.text
     assert score.recommendation in draft.text
+
+
+def test_generate_x_post_can_include_score_reason_context():
+    offer = make_offer()
+    explanation = explain_score(offer)
+
+    draft = generate_x_post_for_offer(
+        offer,
+        score=explanation.score,
+        score_explanation=explanation,
+    )
+
+    assert draft.score_explanation == explanation
+    assert "理由:" in draft.text
+    assert "倫理リスク" in draft.text
+
+
+def test_generate_x_post_preserves_score_reason_when_truncated():
+    offer = make_offer(
+        offer_name="とても長い名前のAI講座" * 20,
+        target="AIとWebマーケティングを学びたい社会人" * 10,
+        problem="学習内容、費用、サポート、受講期間を比較したい" * 10,
+        benefit="講座内容、サポート体制、費用、受講条件を確認できます" * 10,
+    )
+    explanation = explain_score(offer)
+
+    draft = generate_x_post_for_offer(
+        offer,
+        score=explanation.score,
+        score_explanation=explanation,
+    )
+
+    assert len(draft.text) <= MAX_X_POST_LENGTH
+    assert "評価メモ:" in draft.text
+    assert "理由:" in draft.text
+    assert draft.text.endswith("詳細条件は公式情報で確認してください。")
 
 
 def test_generate_x_post_supports_caution_template():
@@ -148,6 +184,22 @@ def test_generate_note_article_can_include_score_context():
     assert f"- 判定: {score.recommendation}" in draft.markdown
 
 
+def test_generate_note_article_can_include_score_reasons():
+    offer = make_offer()
+    explanation = explain_score(offer)
+
+    draft = generate_note_article_for_offer(
+        offer,
+        score=explanation.score,
+        score_explanation=explanation,
+    )
+
+    assert draft.score_explanation == explanation
+    assert "### 評価理由" in draft.markdown
+    assert "- 倫理リスク:" in draft.markdown
+    assert "成果見込みを断定" in draft.markdown
+
+
 def test_generate_note_article_supports_summary_template():
     draft = generate_note_article_for_offer(make_offer(), template="summary")
 
@@ -213,9 +265,12 @@ def test_generate_content_pack_can_include_scores(tmp_path):
     summary = pack.compliance_summary_path.read_text(encoding="utf-8")
 
     assert pack.x_posts[0].score is not None
+    assert pack.x_posts[0].score_explanation is not None
     assert pack.note_articles[0].score is not None
+    assert pack.note_articles[0].score_explanation is not None
     assert "Recommendation" in summary
     assert pack.x_posts[0].score.recommendation in summary
+    assert "### 評価理由" in pack.note_articles_path.read_text(encoding="utf-8")
 
 
 def test_generate_content_pack_can_use_template(tmp_path):
