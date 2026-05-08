@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from affiliate_os.models import Offer
+
 
 class ComplianceSeverity(StrEnum):
     HIGH = "high"
@@ -31,6 +33,18 @@ class ComplianceReport:
     @property
     def high_risk_count(self) -> int:
         return sum(1 for issue in self.issues if issue.severity == ComplianceSeverity.HIGH)
+
+
+@dataclass(frozen=True)
+class OfferComplianceReport:
+    offer_id: str
+    offer_name: str
+    genre: str
+    report: ComplianceReport
+
+    @property
+    def passed(self) -> bool:
+        return self.report.passed
 
 
 PROHIBITED_PHRASES = [
@@ -88,6 +102,34 @@ def check_compliance(text: str) -> ComplianceReport:
     issues.extend(detect_sensitive_domain_assertions(normalized_text))
 
     return ComplianceReport(text=normalized_text, issues=dedupe_issues(issues))
+
+
+def check_offer_compliance(offer: Offer) -> OfferComplianceReport:
+    report = check_compliance(build_offer_compliance_text(offer))
+    return OfferComplianceReport(
+        offer_id=offer.offer_id,
+        offer_name=offer.offer_name,
+        genre=offer.genre,
+        report=report,
+    )
+
+
+def check_offers_compliance(offers: list[Offer]) -> list[OfferComplianceReport]:
+    return [check_offer_compliance(offer) for offer in offers]
+
+
+def build_offer_compliance_text(offer: Offer) -> str:
+    values = [
+        offer.genre,
+        offer.offer_name,
+        offer.target,
+        offer.problem,
+        offer.benefit,
+        offer.risk_level,
+        offer.brand_fit,
+        offer.memo,
+    ]
+    return "\n".join(value for value in values if value)
 
 
 def detect_prohibited_phrases(text: str) -> list[ComplianceIssue]:

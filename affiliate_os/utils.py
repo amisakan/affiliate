@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from affiliate_os.compliance import ComplianceReport
+from affiliate_os.compliance import ComplianceReport, OfferComplianceReport
 from affiliate_os.models import Offer, OfferDraft, format_decimal
 from affiliate_os.scoring import OfferScore
 
@@ -196,4 +196,45 @@ def render_compliance_report(report: ComplianceReport) -> None:
     console.print(table)
     console.print(
         f"[yellow]検出件数: {len(report.issues)}件 / high: {report.high_risk_count}件[/yellow]"
+    )
+
+
+def render_offers_compliance_reports(reports: list[OfferComplianceReport]) -> None:
+    if not reports:
+        console.print("[yellow]チェック対象の案件がありません。[/yellow]")
+        return
+
+    risky_reports = [report for report in reports if not report.passed]
+    if not risky_reports:
+        console.print("[green]全案件で明確なリスク表現は見つかりませんでした。[/green]")
+        return
+
+    table = Table(title="Offer Compliance Check")
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Genre")
+    table.add_column("Offer")
+    table.add_column("Severity")
+    table.add_column("Category")
+    table.add_column("Matched")
+    table.add_column("Suggestion")
+
+    for offer_report in risky_reports:
+        for issue in offer_report.report.issues:
+            style = "red" if issue.severity == "high" else "yellow"
+            table.add_row(
+                offer_report.offer_id,
+                offer_report.genre,
+                offer_report.offer_name,
+                issue.severity.value,
+                issue.category,
+                issue.matched_text,
+                issue.suggestion,
+                style=style,
+            )
+
+    console.print(table)
+    console.print(
+        "[yellow]"
+        f"リスクあり: {len(risky_reports)}件 / チェック対象: {len(reports)}件"
+        "[/yellow]"
     )

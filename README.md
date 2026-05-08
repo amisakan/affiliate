@@ -163,6 +163,18 @@ uv run python -m affiliate_os check-text "誰でも簡単に月100万円確定�
 uv run python -m affiliate_os check-text --file docs/sample.md
 ```
 
+登録済み案件CSVをまとめてチェック:
+
+```bash
+uv run python -m affiliate_os check-offers
+```
+
+別のCSVをチェック:
+
+```bash
+uv run python -m affiliate_os check-offers --data-path data/offers.csv
+```
+
 検出対象の例:
 
 - 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」

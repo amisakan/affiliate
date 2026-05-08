@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from affiliate_os.compliance import check_compliance
+from affiliate_os.compliance import check_compliance, check_offers_compliance
 from affiliate_os.importers.reviewer import (
     build_offer_from_draft,
     complete_required_fields,
@@ -32,6 +32,7 @@ from affiliate_os.utils import (
     render_offer_detail,
     render_offer_draft,
     render_offer_table,
+    render_offers_compliance_reports,
     render_score_ranking,
 )
 
@@ -149,6 +150,18 @@ def check_text(
     target_text = read_check_target(text=text, file_path=file_path)
     report = check_compliance(target_text)
     render_compliance_report(report)
+
+
+@app.command("check-offers")
+def check_offers(
+    data_path: Path = typer.Option(
+        DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
+    ),
+) -> None:
+    """登録済み案件のメモやベネフィットをまとめてコンプライアンスチェックします。"""
+    offers = load_offers(data_path)
+    reports = check_offers_compliance(offers)
+    render_offers_compliance_reports(reports)
 
 
 def read_check_target(text: str | None, file_path: Path | None) -> str:
