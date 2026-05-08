@@ -10,7 +10,7 @@ from rich.table import Table
 from affiliate_os.compliance import ComplianceReport, OfferComplianceReport
 from affiliate_os.content import ContentPack, NoteArticleDraft, XPostDraft
 from affiliate_os.models import Offer, OfferDraft, format_decimal
-from affiliate_os.scoring import OfferScore
+from affiliate_os.scoring import OfferScore, OfferScoreExplanation
 
 console = Console()
 
@@ -169,6 +169,14 @@ def render_score_ranking(scores: list[OfferScore]) -> None:
             lines.append(f"- 注意コメント: {score.risk_comment}")
         lines.append("")
     console.print("\n".join(lines))
+
+
+def render_score_explanations(explanations: list[OfferScoreExplanation]) -> None:
+    if not explanations:
+        console.print("[yellow]スコア説明の対象案件がありません。[/yellow]")
+        return
+    for explanation in explanations:
+        console.print(Panel(explanation.to_markdown(), title="スコア理由", border_style="cyan"))
 
 
 def render_compliance_report(report: ComplianceReport) -> None:

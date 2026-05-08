@@ -71,6 +71,43 @@ class OfferScore:
         }
 
 
+@dataclass(frozen=True)
+class ScoreReason:
+    metric: str
+    score: int
+    reason: str
+
+
+@dataclass(frozen=True)
+class OfferScoreExplanation:
+    score: OfferScore
+    reasons: list[ScoreReason]
+
+    def to_markdown(self) -> str:
+        lines = [
+            f"# {self.score.offer_name}",
+            "",
+            f"- 案件ID: {self.score.offer_id}",
+            f"- ASP: {self.score.asp}",
+            f"- ジャンル: {self.score.genre}",
+            f"- 総合スコア: {self.score.total_score}/100",
+            f"- 判定: {self.score.recommendation}",
+        ]
+        if self.score.risk_comment:
+            lines.append(f"- 注意コメント: {self.score.risk_comment}")
+        lines.extend(["", "## スコア理由", ""])
+        for reason in self.reasons:
+            lines.extend(
+                [
+                    f"### {reason.metric}: {reason.score}/100",
+                    "",
+                    reason.reason,
+                    "",
+                ]
+            )
+        return "\n".join(lines).strip() + "\n"
+
+
 def score_offer(offer: Offer, scored_at: datetime | None = None) -> OfferScore:
     scored_at = scored_at or datetime.now()
     reward = reward_score(offer.reward)
@@ -115,6 +152,34 @@ def score_offer(offer: Offer, scored_at: datetime | None = None) -> OfferScore:
     )
 
 
+def explain_score(offer: Offer, scored_at: datetime | None = None) -> OfferScoreExplanation:
+    score = score_offer(offer, scored_at=scored_at)
+    reasons = [
+        ScoreReason("報酬単価", score.reward_score, reward_reason(offer)),
+        ScoreReason("承認率", score.approval_rate_score, approval_rate_reason(offer)),
+        ScoreReason("Cookie期間", score.cookie_days_score, cookie_days_reason(offer)),
+        ScoreReason("悩みの深さ", score.problem_depth_score, problem_depth_reason(offer)),
+        ScoreReason("ブランド適合度", score.brand_fit_score, brand_fit_reason(offer)),
+        ScoreReason("倫理リスク", score.ethical_risk_score, ethical_risk_reason(offer)),
+        ScoreReason(
+            "成約難易度",
+            score.conversion_difficulty_score,
+            conversion_difficulty_reason(offer, score.approval_rate_score),
+        ),
+        ScoreReason("長期資産性", score.long_term_asset_score, long_term_asset_reason(offer)),
+    ]
+    return OfferScoreExplanation(score=score, reasons=reasons)
+
+
+def explain_scores(
+    offers: list[Offer],
+    scored_at: datetime | None = None,
+) -> list[OfferScoreExplanation]:
+    scored_at = scored_at or datetime.now()
+    explanations = [explain_score(offer, scored_at=scored_at) for offer in offers]
+    return sorted(explanations, key=lambda explanation: explanation.score.total_score, reverse=True)
+
+
 def score_offers(offers: list[Offer], scored_at: datetime | None = None) -> list[OfferScore]:
     scored_at = scored_at or datetime.now()
     scores = [score_offer(offer, scored_at=scored_at) for offer in offers]
@@ -128,6 +193,16 @@ def write_scores_csv(scores: list[OfferScore], path: Path = DEFAULT_SCORES_PATH)
         writer.writeheader()
         for score in scores:
             writer.writerow(score.to_csv_row())
+    return path
+
+
+def write_score_explanations_markdown(
+    explanations: list[OfferScoreExplanation],
+    path: Path,
+) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sections = [explanation.to_markdown() for explanation in explanations]
+    path.write_text("\n---\n\n".join(sections), encoding="utf-8")
     return path
 
 
@@ -145,6 +220,15 @@ def reward_score(reward: Decimal) -> int:
     return 25
 
 
+def reward_reason(offer: Offer) -> str:
+    reward = format_decimal(offer.reward)
+    if offer.reward >= Decimal("30000"):
+        return f"報酬単価は{reward}で高めです。単価だけで判断せず、承認条件と読者適合を確認します。"
+    if offer.reward >= Decimal("8000"):
+        return f"報酬単価は{reward}で中程度です。比較記事や導線設計と合わせて検討します。"
+    return f"報酬単価は{reward}です。収益性より読者にとっての適合性を優先して確認します。"
+
+
 def approval_rate_score(value: str) -> int:
     rate = parse_percent(value)
     if rate is None:
@@ -160,6 +244,15 @@ def approval_rate_score(value: str) -> int:
     return 20
 
 
+def approval_rate_reason(offer: Offer) -> str:
+    rate = parse_percent(offer.approval_rate)
+    if rate is None:
+        return "承認率が未確認です。成果見込みを断定せず、ASPや広告主の条件確認を優先します。"
+    if rate >= Decimal("60"):
+        return f"承認率は{offer.approval_rate}です。比較的確認しやすい材料ですが、否認条件も併せて見ます。"
+    return f"承認率は{offer.approval_rate}です。成果条件、否認条件、申込後のハードルを慎重に確認します。"
+
+
 def cookie_days_score(cookie_days: int | None) -> int:
     if cookie_days is None:
         return 50
@@ -172,6 +265,14 @@ def cookie_days_score(cookie_days: int | None) -> int:
     if cookie_days >= 7:
         return 40
     return 25
+
+
+def cookie_days_reason(offer: Offer) -> str:
+    if offer.cookie_days is None:
+        return "Cookie期間が未確認です。再訪問による成果条件を公式情報で確認します。"
+    if offer.cookie_days >= 60:
+        return f"Cookie期間は{offer.cookie_days}日です。比較検討期間が長い案件でも確認しやすい条件です。"
+    return f"Cookie期間は{offer.cookie_days}日です。検討期間が短くなりやすいため導線設計を確認します。"
 
 
 def problem_depth_score(offer: Offer) -> int:
@@ -202,6 +303,21 @@ def problem_depth_score(offer: Offer) -> int:
     return clamp_score(score)
 
 
+def problem_depth_reason(offer: Offer) -> str:
+    text = searchable_text(offer)
+    sensitive_hits = matched_keywords(text, ["転職", "就職", "医療", "金融", "副業", "収入", "スキル"])
+    details = []
+    if offer.problem:
+        details.append("解決したい悩みが入力されています")
+    if offer.target:
+        details.append("想定ターゲットが入力されています")
+    if sensitive_hits:
+        details.append(f"深い検討につながりやすい語句: {', '.join(sensitive_hits)}")
+    if not details:
+        details.append("悩みやターゲットの情報が少ないため追加確認が必要です")
+    return " / ".join(details)
+
+
 def brand_fit_score(value: str) -> int:
     normalized = value.strip()
     if normalized in {"高", "高い", "非常に高い", "良い", "◎"}:
@@ -213,6 +329,13 @@ def brand_fit_score(value: str) -> int:
     if "要確認" in normalized or not normalized:
         return 50
     return 55
+
+
+def brand_fit_reason(offer: Offer) -> str:
+    value = offer.brand_fit.strip()
+    if not value or "要確認" in value:
+        return "ブランド適合度は要確認です。自分の発信テーマ、読者層、過去コンテンツとの整合を確認します。"
+    return f"ブランド適合度は「{value}」です。読者の期待と紹介理由が自然につながるか確認します。"
 
 
 def ethical_risk_score(offer: Offer) -> int:
@@ -259,6 +382,25 @@ def ethical_risk_score(offer: Offer) -> int:
     return clamp_score(100 - risk)
 
 
+def ethical_risk_reason(offer: Offer) -> str:
+    text = searchable_text(offer)
+    hits = matched_keywords(
+        text,
+        ["医療", "金融", "転職", "就職", "障害", "診断", "投資", "借入", "ローン", "保険"],
+    )
+    denial_hits = matched_keywords(text, ["否認", "本人", "NG", "リスティング違反", "キャンセル"])
+    parts = []
+    if offer.risk_level:
+        parts.append(f"リスクレベル: {offer.risk_level}")
+    if hits:
+        parts.append(f"慎重な表現が必要な語句: {', '.join(hits)}")
+    if denial_hits:
+        parts.append(f"条件確認が必要な語句: {', '.join(denial_hits)}")
+    if not parts:
+        parts.append("明確な高リスク語句は少ないですが、最新条件と表現の確認は必要です")
+    return " / ".join(parts)
+
+
 def conversion_difficulty_score(offer: Offer, approval_score: int) -> int:
     text = searchable_text(offer)
     score = 70
@@ -285,6 +427,21 @@ def conversion_difficulty_score(offer: Offer, approval_score: int) -> int:
     return clamp_score(score)
 
 
+def conversion_difficulty_reason(offer: Offer, approval_score: int) -> str:
+    text = searchable_text(offer)
+    difficult_hits = matched_keywords(text, ["説明会", "面談", "入金", "受講", "審査", "診断"])
+    parts = []
+    if difficult_hits:
+        parts.append(f"成約前のハードルになり得る語句: {', '.join(difficult_hits)}")
+    if offer.reward >= Decimal("30000"):
+        parts.append("高単価のため検討・成約ハードルが上がる可能性があります")
+    if approval_score < 50:
+        parts.append("承認率スコアが低いため成果条件の確認が必要です")
+    if not parts:
+        parts.append("明確な高ハードル要素は少ないですが、申込条件と導線を確認します")
+    return " / ".join(parts)
+
+
 def long_term_asset_score(offer: Offer) -> int:
     text = searchable_text(offer)
     score = 45
@@ -308,6 +465,22 @@ def long_term_asset_score(offer: Offer) -> int:
     if offer.benefit:
         score += 6
     return clamp_score(score)
+
+
+def long_term_asset_reason(offer: Offer) -> str:
+    text = searchable_text(offer)
+    asset_hits = matched_keywords(text, ["AI", "Web", "IT", "スキル", "学習", "講座", "比較", "基礎"])
+    short_hits = matched_keywords(text, ["キャンペーン", "期間限定", "セール", "ポイント"])
+    parts = []
+    if asset_hits:
+        parts.append(f"長期記事化しやすい語句: {', '.join(asset_hits)}")
+    if short_hits:
+        parts.append(f"短期要素として確認する語句: {', '.join(short_hits)}")
+    if offer.benefit:
+        parts.append("ベネフィットが入力されており記事構成に使いやすいです")
+    if not parts:
+        parts.append("長期資産化の観点は追加情報を確認します")
+    return " / ".join(parts)
 
 
 def recommendation_for(total_score: int, ethical_score: int, conversion_score: int) -> str:
@@ -363,6 +536,10 @@ def searchable_text(offer: Offer) -> str:
             format_decimal(offer.price),
         ]
     )
+
+
+def matched_keywords(text: str, keywords: list[str]) -> list[str]:
+    return [keyword for keyword in keywords if keyword in text]
 
 
 def clamp_score(value: int) -> int:
