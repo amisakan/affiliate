@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -66,6 +66,16 @@ class ContentReview:
             "content_preview": self.content_preview,
             "reviewed_at": self.reviewed_at.isoformat(timespec="seconds"),
         }
+
+
+@dataclass(frozen=True)
+class ContentReviewUpdateResult:
+    reviews: list[ContentReview]
+    updated_review: ContentReview | None
+
+    @property
+    def updated(self) -> bool:
+        return self.updated_review is not None
 
 
 def build_content_reviews(
@@ -154,6 +164,107 @@ def normalize_review_status(status: str) -> str:
         allowed = ", ".join(REVIEW_STATUSES)
         raise ValueError(f"unknown review status: {status}. allowed: {allowed}")
     return normalized
+
+
+def load_content_reviews_csv(path: Path) -> list[ContentReview]:
+    with path.open(newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        return [content_review_from_row(row) for row in reader]
+
+
+def content_review_from_row(row: dict[str, str]) -> ContentReview:
+    return ContentReview(
+        review_id=row.get("review_id", ""),
+        content_type=row.get("content_type", ""),
+        offer_id=row.get("offer_id", ""),
+        offer_name=row.get("offer_name", ""),
+        title=row.get("title", ""),
+        status=normalize_review_status(row.get("status", DEFAULT_REVIEW_STATUS)),
+        reviewer_comment=row.get("reviewer_comment", ""),
+        compliance_status=row.get("compliance_status", ""),
+        high_risk_count=parse_int(row.get("high_risk_count", "0")),
+        issue_count=parse_int(row.get("issue_count", "0")),
+        score=parse_optional_int(row.get("score", "")),
+        recommendation=row.get("recommendation", ""),
+        template=row.get("template", ""),
+        content_preview=row.get("content_preview", ""),
+        reviewed_at=parse_datetime(row.get("reviewed_at", "")),
+    )
+
+
+def update_content_review(
+    reviews: list[ContentReview],
+    review_id: str,
+    status: str,
+    reviewer_comment: str | None = None,
+    reviewed_at: datetime | None = None,
+) -> ContentReviewUpdateResult:
+    normalized_status = normalize_review_status(status)
+    reviewed_at = reviewed_at or datetime.now()
+    updated_review = None
+    updated_reviews = []
+    for review in reviews:
+        if review.review_id == review_id:
+            updated_review = replace(
+                review,
+                status=normalized_status,
+                reviewer_comment=(
+                    review.reviewer_comment
+                    if reviewer_comment is None
+                    else reviewer_comment
+                ),
+                reviewed_at=reviewed_at,
+            )
+            updated_reviews.append(updated_review)
+        else:
+            updated_reviews.append(review)
+    return ContentReviewUpdateResult(
+        reviews=updated_reviews,
+        updated_review=updated_review,
+    )
+
+
+def update_content_review_csv(
+    input_path: Path,
+    review_id: str,
+    status: str,
+    reviewer_comment: str | None = None,
+    output_path: Path | None = None,
+    reviewed_at: datetime | None = None,
+) -> ContentReviewUpdateResult:
+    reviews = load_content_reviews_csv(input_path)
+    result = update_content_review(
+        reviews,
+        review_id=review_id,
+        status=status,
+        reviewer_comment=reviewer_comment,
+        reviewed_at=reviewed_at,
+    )
+    if result.updated:
+        write_content_reviews_csv(result.reviews, output_path or input_path)
+    return result
+
+
+def parse_optional_int(value: str) -> int | None:
+    if not value:
+        return None
+    return parse_int(value)
+
+
+def parse_int(value: str) -> int:
+    try:
+        return int(value)
+    except ValueError:
+        return 0
+
+
+def parse_datetime(value: str) -> datetime:
+    if not value:
+        return datetime.fromtimestamp(0)
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return datetime.fromtimestamp(0)
 
 
 def compliance_status_for(passed: bool) -> str:
