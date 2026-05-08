@@ -25,6 +25,15 @@ from affiliate_os.importers.reviewer import (
 )
 from affiliate_os.importers.vision_importer import extract_offer_from_image
 from affiliate_os.models import Offer
+from affiliate_os.reviews import (
+    DEFAULT_CONTENT_REVIEWS_MARKDOWN_PATH,
+    DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH,
+    REVIEW_STATUSES,
+    build_content_reviews,
+    normalize_review_status,
+    write_content_reviews_csv,
+    write_content_reviews_markdown,
+)
 from affiliate_os.scoring import (
     DEFAULT_SCORES_PATH,
     explain_scores,
@@ -47,6 +56,7 @@ from affiliate_os.utils import (
     console,
     render_compliance_report,
     render_content_pack,
+    render_content_reviews,
     render_note_article_drafts,
     render_offer_detail,
     render_offer_draft,
@@ -304,6 +314,65 @@ def generate_content_pack_command(
     render_content_pack(pack)
 
 
+@app.command("generate-content-reviews")
+def generate_content_reviews_command(
+    offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
+    with_scores: bool = typer.Option(False, "--with-scores", help="スコアリング結果を反映"),
+    template: str = typer.Option(
+        "comparison", "--template", help=f"生成テンプレート: {', '.join(CONTENT_TEMPLATES)}"
+    ),
+    status: str = typer.Option(
+        "draft", "--status", help=f"初期レビュー状態: {', '.join(REVIEW_STATUSES)}"
+    ),
+    comment: str = typer.Option("", "--comment", help="レビューコメントの初期値"),
+    output_format: str = typer.Option("csv", "--format", help="出力形式: csv, markdown"),
+    data_path: Path = typer.Option(
+        DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
+    ),
+    output_path: Path | None = typer.Option(
+        None, "--output-path", help="レビュー一覧の保存先。未指定時は既定パスに保存"
+    ),
+) -> None:
+    """生成物レビュー用の一覧を作成します。"""
+    template = parse_content_template(template)
+    status = parse_review_status(status)
+    output_format = parse_review_output_format(output_format)
+    offers = filter_offers_by_id(load_offers(data_path), offer_id)
+    if offer_id and not offers:
+        console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
+        return
+
+    score_explanations = explain_scores(offers) if with_scores else None
+    scores = [explanation.score for explanation in score_explanations or []] or None
+    x_posts = generate_x_posts_for_offers(
+        offers,
+        scores=scores,
+        score_explanations=score_explanations,
+        template=template,
+    )
+    note_articles = generate_note_articles_for_offers(
+        offers,
+        scores=scores,
+        score_explanations=score_explanations,
+        template=template,
+    )
+    reviews = build_content_reviews(
+        x_posts,
+        note_articles,
+        status=status,
+        reviewer_comment=comment,
+    )
+    render_content_reviews(reviews)
+
+    if output_format == "markdown":
+        target_path = output_path or DEFAULT_CONTENT_REVIEWS_MARKDOWN_PATH
+        saved_path = write_content_reviews_markdown(reviews, target_path)
+    else:
+        target_path = output_path or DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH
+        saved_path = write_content_reviews_csv(reviews, target_path)
+    console.print(f"[green]生成物レビュー一覧を保存しました: {saved_path}[/green]")
+
+
 def read_check_target(text: str | None, file_path: Path | None) -> str:
     if text and file_path:
         raise typer.BadParameter("テキスト引数と --file は同時に指定できません。")
@@ -321,6 +390,20 @@ def parse_content_template(value: str) -> str:
         return normalize_content_template(value)
     except ValueError as exc:
         raise typer.BadParameter(str(exc)) from exc
+
+
+def parse_review_status(value: str) -> str:
+    try:
+        return normalize_review_status(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+
+
+def parse_review_output_format(value: str) -> str:
+    normalized = value.strip().lower()
+    if normalized not in {"csv", "markdown"}:
+        raise typer.BadParameter("出力形式は csv または markdown を指定してください。")
+    return normalized
 
 
 def parse_min_reward(value: str | None) -> Decimal | None:

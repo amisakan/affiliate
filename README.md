@@ -277,6 +277,24 @@ uv run python -m affiliate_os generate-content-pack --offer-id OFF-0001
 uv run python -m affiliate_os generate-content-pack --output-dir outputs/generated/content_pack
 ```
 
+生成物レビュー一覧をCSVで作成:
+
+```bash
+uv run python -m affiliate_os generate-content-reviews --with-scores
+```
+
+特定案件のレビュー一覧をMarkdownで作成:
+
+```bash
+uv run python -m affiliate_os generate-content-reviews --offer-id OFF-0001 --with-scores --format markdown --output-path outputs/generated/content_reviews.md
+```
+
+レビュー状態の初期値を指定:
+
+```bash
+uv run python -m affiliate_os generate-content-reviews --status needs_revision --comment "公式条件を再確認する"
+```
+
 検出対象の例:
 
 - 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」
