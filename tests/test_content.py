@@ -3,9 +3,13 @@ from datetime import datetime
 from affiliate_os.content import (
     MAX_X_POST_LENGTH,
     filter_offers_by_id,
+    format_note_articles_markdown,
     format_x_posts_markdown,
+    generate_note_article_for_offer,
+    generate_note_articles_for_offers,
     generate_x_post_for_offer,
     generate_x_posts_for_offers,
+    write_note_articles_markdown,
     write_x_posts_markdown,
 )
 from affiliate_os.models import Offer
@@ -91,3 +95,37 @@ def test_format_and_write_x_posts_markdown(tmp_path):
     assert format_x_posts_markdown([draft]) == text
     assert "# X Post Drafts" in text
     assert "OFF-0001" in text
+
+
+def test_generate_note_article_for_offer_creates_compliant_markdown():
+    draft = generate_note_article_for_offer(make_offer())
+
+    assert draft.offer_id == "OFF-0001"
+    assert draft.passed_compliance
+    assert draft.title == "AI講座を検討するときの確認メモ"
+    assert "# AI講座を検討するときの確認メモ" in draft.markdown
+    assert "成果や効果を約束するものではありません" in draft.markdown
+    assert "申し込み前に確認したいこと" in draft.markdown
+    assert "必ず稼げる" not in draft.markdown
+    assert "月100万円確定" not in draft.markdown
+
+
+def test_generate_note_articles_for_offers_keeps_order():
+    offers = [make_offer("OFF-0001"), make_offer("OFF-0002")]
+
+    drafts = generate_note_articles_for_offers(offers)
+
+    assert [draft.offer_id for draft in drafts] == ["OFF-0001", "OFF-0002"]
+
+
+def test_format_and_write_note_articles_markdown(tmp_path):
+    draft = generate_note_article_for_offer(make_offer())
+    output_path = tmp_path / "note_articles.md"
+
+    saved_path = write_note_articles_markdown([draft], output_path)
+    text = output_path.read_text(encoding="utf-8")
+
+    assert saved_path == output_path
+    assert format_note_articles_markdown([draft]) == text
+    assert "# Note Article Drafts" in text
+    assert "<!-- offer_id: OFF-0001 -->" in text
