@@ -8,7 +8,9 @@ import typer
 
 from affiliate_os.compliance import check_compliance, check_offers_compliance
 from affiliate_os.content import (
+    DEFAULT_CONTENT_PACK_DIR,
     filter_offers_by_id,
+    generate_content_pack,
     generate_note_articles_for_offers,
     generate_x_posts_for_offers,
     write_note_articles_markdown,
@@ -36,6 +38,7 @@ from affiliate_os.utils import (
     ask_required,
     console,
     render_compliance_report,
+    render_content_pack,
     render_note_article_drafts,
     render_offer_detail,
     render_offer_draft,
@@ -215,6 +218,25 @@ def generate_note_articles(
     if output_path:
         saved_path = write_note_articles_markdown(drafts, output_path)
         console.print(f"[green]note記事下書きを保存しました: {saved_path}[/green]")
+
+
+@app.command("generate-content-pack")
+def generate_content_pack_command(
+    offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
+    data_path: Path = typer.Option(
+        DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
+    ),
+    output_dir: Path = typer.Option(
+        DEFAULT_CONTENT_PACK_DIR, "--output-dir", help="生成物の保存先ディレクトリ"
+    ),
+) -> None:
+    """X投稿案、note記事下書き、コンプライアンス概要をまとめて生成します。"""
+    offers = filter_offers_by_id(load_offers(data_path), offer_id)
+    if offer_id and not offers:
+        console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
+        return
+    pack = generate_content_pack(offers, output_dir)
+    render_content_pack(pack)
 
 
 def read_check_target(text: str | None, file_path: Path | None) -> str:

@@ -9,6 +9,7 @@ from affiliate_os.models import Offer
 MAX_X_POST_LENGTH = 280
 DEFAULT_X_POSTS_OUTPUT_PATH = Path("outputs") / "generated" / "x_posts.md"
 DEFAULT_NOTE_ARTICLES_OUTPUT_PATH = Path("outputs") / "generated" / "note_articles.md"
+DEFAULT_CONTENT_PACK_DIR = Path("outputs") / "generated" / "content_pack"
 
 
 @dataclass(frozen=True)
@@ -34,6 +35,20 @@ class NoteArticleDraft:
     @property
     def passed_compliance(self) -> bool:
         return self.compliance_report.passed
+
+
+@dataclass(frozen=True)
+class ContentPack:
+    x_posts: list[XPostDraft]
+    note_articles: list[NoteArticleDraft]
+    output_dir: Path
+    x_posts_path: Path
+    note_articles_path: Path
+    compliance_summary_path: Path
+
+    @property
+    def passed_compliance(self) -> bool:
+        return all(draft.passed_compliance for draft in self.x_posts + self.note_articles)
 
 
 def generate_x_post_for_offer(offer: Offer) -> XPostDraft:
@@ -64,6 +79,27 @@ def generate_note_article_for_offer(offer: Offer) -> NoteArticleDraft:
 
 def generate_note_articles_for_offers(offers: list[Offer]) -> list[NoteArticleDraft]:
     return [generate_note_article_for_offer(offer) for offer in offers]
+
+
+def generate_content_pack(offers: list[Offer], output_dir: Path) -> ContentPack:
+    x_posts = generate_x_posts_for_offers(offers)
+    note_articles = generate_note_articles_for_offers(offers)
+    x_posts_path = output_dir / "x_posts.md"
+    note_articles_path = output_dir / "note_articles.md"
+    compliance_summary_path = output_dir / "compliance_summary.md"
+
+    write_x_posts_markdown(x_posts, x_posts_path)
+    write_note_articles_markdown(note_articles, note_articles_path)
+    write_compliance_summary_markdown(x_posts, note_articles, compliance_summary_path)
+
+    return ContentPack(
+        x_posts=x_posts,
+        note_articles=note_articles,
+        output_dir=output_dir,
+        x_posts_path=x_posts_path,
+        note_articles_path=note_articles_path,
+        compliance_summary_path=compliance_summary_path,
+    )
 
 
 def filter_offers_by_id(offers: list[Offer], offer_id: str | None) -> list[Offer]:
@@ -175,6 +211,18 @@ def write_note_articles_markdown(drafts: list[NoteArticleDraft], output_path: Pa
     return output_path
 
 
+def write_compliance_summary_markdown(
+    x_posts: list[XPostDraft],
+    note_articles: list[NoteArticleDraft],
+    output_path: Path,
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(
+        format_compliance_summary_markdown(x_posts, note_articles), encoding="utf-8"
+    )
+    return output_path
+
+
 def format_x_posts_markdown(drafts: list[XPostDraft]) -> str:
     lines = ["# X Post Drafts", ""]
     for draft in drafts:
@@ -210,3 +258,35 @@ def format_note_articles_markdown(drafts: list[NoteArticleDraft]) -> str:
             ]
         )
     return "\n".join(lines).rstrip("-\n") + "\n"
+
+
+def format_compliance_summary_markdown(
+    x_posts: list[XPostDraft],
+    note_articles: list[NoteArticleDraft],
+) -> str:
+    lines = ["# Compliance Summary", ""]
+    lines.extend(format_draft_summary_rows("X Posts", x_posts))
+    lines.append("")
+    lines.extend(format_draft_summary_rows("Note Articles", note_articles))
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def format_draft_summary_rows(
+    title: str,
+    drafts: list[XPostDraft] | list[NoteArticleDraft],
+) -> list[str]:
+    lines = [f"## {title}", "", "| Offer ID | Status | High Risk | Issues |", "| --- | --- | ---: | ---: |"]
+    if not drafts:
+        lines.append("| - | no target | 0 | 0 |")
+        return lines
+
+    for draft in drafts:
+        status = "passed" if draft.passed_compliance else "needs review"
+        lines.append(
+            "| "
+            f"{draft.offer_id} | "
+            f"{status} | "
+            f"{draft.compliance_report.high_risk_count} | "
+            f"{len(draft.compliance_report.issues)} |"
+        )
+    return lines

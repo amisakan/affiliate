@@ -3,8 +3,10 @@ from datetime import datetime
 from affiliate_os.content import (
     MAX_X_POST_LENGTH,
     filter_offers_by_id,
+    format_compliance_summary_markdown,
     format_note_articles_markdown,
     format_x_posts_markdown,
+    generate_content_pack,
     generate_note_article_for_offer,
     generate_note_articles_for_offers,
     generate_x_post_for_offer,
@@ -129,3 +131,30 @@ def test_format_and_write_note_articles_markdown(tmp_path):
     assert format_note_articles_markdown([draft]) == text
     assert "# Note Article Drafts" in text
     assert "<!-- offer_id: OFF-0001 -->" in text
+
+
+def test_format_compliance_summary_markdown():
+    x_post = generate_x_post_for_offer(make_offer())
+    note_article = generate_note_article_for_offer(make_offer())
+
+    text = format_compliance_summary_markdown([x_post], [note_article])
+
+    assert "# Compliance Summary" in text
+    assert "## X Posts" in text
+    assert "## Note Articles" in text
+    assert "| OFF-0001 | passed | 0 | 0 |" in text
+
+
+def test_generate_content_pack_writes_all_outputs(tmp_path):
+    output_dir = tmp_path / "content_pack"
+
+    pack = generate_content_pack([make_offer()], output_dir)
+
+    assert pack.output_dir == output_dir
+    assert pack.passed_compliance
+    assert pack.x_posts_path.exists()
+    assert pack.note_articles_path.exists()
+    assert pack.compliance_summary_path.exists()
+    assert "X Post Drafts" in pack.x_posts_path.read_text(encoding="utf-8")
+    assert "Note Article Drafts" in pack.note_articles_path.read_text(encoding="utf-8")
+    assert "Compliance Summary" in pack.compliance_summary_path.read_text(encoding="utf-8")
