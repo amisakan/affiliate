@@ -6,6 +6,7 @@ from pathlib import Path
 
 import typer
 
+from affiliate_os.compliance import check_compliance
 from affiliate_os.importers.reviewer import (
     build_offer_from_draft,
     complete_required_fields,
@@ -27,6 +28,7 @@ from affiliate_os.utils import (
     ask_optional,
     ask_required,
     console,
+    render_compliance_report,
     render_offer_detail,
     render_offer_draft,
     render_offer_table,
@@ -136,6 +138,29 @@ def score_offers_command(
     write_scores_csv(scores, output_path)
     console.print(f"[green]スコアを保存しました: {output_path}[/green]")
     render_score_ranking(scores)
+
+
+@app.command("check-text")
+def check_text(
+    text: str | None = typer.Argument(None, help="チェック対象テキスト"),
+    file_path: Path | None = typer.Option(None, "--file", "-f", help="チェック対象ファイル"),
+) -> None:
+    """テキストの誇大表現、禁止表現、断定表現をチェックします。"""
+    target_text = read_check_target(text=text, file_path=file_path)
+    report = check_compliance(target_text)
+    render_compliance_report(report)
+
+
+def read_check_target(text: str | None, file_path: Path | None) -> str:
+    if text and file_path:
+        raise typer.BadParameter("テキスト引数と --file は同時に指定できません。")
+    if file_path:
+        if not file_path.exists():
+            raise typer.BadParameter(f"ファイルが見つかりません: {file_path}")
+        return file_path.read_text(encoding="utf-8")
+    if text:
+        return text
+    raise typer.BadParameter("チェック対象テキスト、または --file を指定してください。")
 
 
 def parse_min_reward(value: str | None) -> Decimal | None:

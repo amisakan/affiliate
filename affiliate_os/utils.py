@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from affiliate_os.compliance import ComplianceReport
 from affiliate_os.models import Offer, OfferDraft, format_decimal
 from affiliate_os.scoring import OfferScore
 
@@ -167,3 +168,32 @@ def render_score_ranking(scores: list[OfferScore]) -> None:
             lines.append(f"- 注意コメント: {score.risk_comment}")
         lines.append("")
     console.print("\n".join(lines))
+
+
+def render_compliance_report(report: ComplianceReport) -> None:
+    if report.passed:
+        console.print("[green]コンプライアンス上の明確なリスク表現は見つかりませんでした。[/green]")
+        return
+
+    table = Table(title="Compliance Check")
+    table.add_column("Severity", style="cyan", no_wrap=True)
+    table.add_column("Category")
+    table.add_column("Matched")
+    table.add_column("Message")
+    table.add_column("Suggestion")
+
+    for issue in report.issues:
+        style = "red" if issue.severity == "high" else "yellow"
+        table.add_row(
+            issue.severity.value,
+            issue.category,
+            issue.matched_text,
+            issue.message,
+            issue.suggestion,
+            style=style,
+        )
+
+    console.print(table)
+    console.print(
+        f"[yellow]検出件数: {len(report.issues)}件 / high: {report.high_risk_count}件[/yellow]"
+    )

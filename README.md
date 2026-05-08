@@ -151,6 +151,25 @@ uv run python -m affiliate_os list-offers --min-reward 30000
 uv run python -m affiliate_os score-offers
 ```
 
+コンプライアンスチェック:
+
+```bash
+uv run python -m affiliate_os check-text "誰でも簡単に月100万円確定です"
+```
+
+ファイルをチェック:
+
+```bash
+uv run python -m affiliate_os check-text --file docs/sample.md
+```
+
+検出対象の例:
+
+- 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」
+- 誇大表現: 成果、安全性、収益を強く断定する表現
+- 不安訴求: 読者の焦りや恐怖を過度に刺激する表現
+- 医療、転職、金融領域での断定表現
+
 画像から案件を取り込む場合は OpenAI API キーを設定します。
 
 ```bash
