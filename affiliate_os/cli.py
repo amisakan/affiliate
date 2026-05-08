@@ -179,6 +179,7 @@ def check_offers(
 @app.command("generate-x-posts")
 def generate_x_posts(
     offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
+    with_scores: bool = typer.Option(False, "--with-scores", help="スコアリング結果を反映"),
     data_path: Path = typer.Option(
         DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
     ),
@@ -188,7 +189,8 @@ def generate_x_posts(
 ) -> None:
     """登録済み案件から信頼型のX投稿案を生成します。"""
     offers = filter_offers_by_id(load_offers(data_path), offer_id)
-    drafts = generate_x_posts_for_offers(offers)
+    scores = score_offers(offers) if with_scores else None
+    drafts = generate_x_posts_for_offers(offers, scores=scores)
     render_x_post_drafts(drafts)
     if offer_id and not drafts:
         console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
@@ -201,6 +203,7 @@ def generate_x_posts(
 @app.command("generate-note-articles")
 def generate_note_articles(
     offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
+    with_scores: bool = typer.Option(False, "--with-scores", help="スコアリング結果を反映"),
     data_path: Path = typer.Option(
         DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
     ),
@@ -210,7 +213,8 @@ def generate_note_articles(
 ) -> None:
     """登録済み案件からnote記事下書きを生成します。"""
     offers = filter_offers_by_id(load_offers(data_path), offer_id)
-    drafts = generate_note_articles_for_offers(offers)
+    scores = score_offers(offers) if with_scores else None
+    drafts = generate_note_articles_for_offers(offers, scores=scores)
     render_note_article_drafts(drafts)
     if offer_id and not drafts:
         console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
@@ -223,6 +227,7 @@ def generate_note_articles(
 @app.command("generate-content-pack")
 def generate_content_pack_command(
     offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
+    with_scores: bool = typer.Option(False, "--with-scores", help="スコアリング結果を反映"),
     data_path: Path = typer.Option(
         DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
     ),
@@ -235,7 +240,7 @@ def generate_content_pack_command(
     if offer_id and not offers:
         console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
         return
-    pack = generate_content_pack(offers, output_dir)
+    pack = generate_content_pack(offers, output_dir, include_scores=with_scores)
     render_content_pack(pack)
 
 
