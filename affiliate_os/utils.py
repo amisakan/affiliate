@@ -8,7 +8,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from affiliate_os.compliance import ComplianceReport, OfferComplianceReport
-from affiliate_os.content import NoteArticleDraft, XPostDraft
+from affiliate_os.content import ContentPack, NoteArticleDraft, XPostDraft
 from affiliate_os.models import Offer, OfferDraft, format_decimal
 from affiliate_os.scoring import OfferScore
 
@@ -290,3 +290,21 @@ def render_note_article_drafts(drafts: list[NoteArticleDraft]) -> None:
                 border_style=border_style,
             )
         )
+
+
+def render_content_pack(pack: ContentPack) -> None:
+    status = "compliance passed" if pack.passed_compliance else "needs compliance review"
+    markdown = "\n".join(
+        [
+            f"出力先: {pack.output_dir}",
+            f"- X投稿案: {pack.x_posts_path}",
+            f"- note記事下書き: {pack.note_articles_path}",
+            f"- コンプライアンス概要: {pack.compliance_summary_path}",
+            "",
+            f"X投稿案: {len(pack.x_posts)}件",
+            f"note記事下書き: {len(pack.note_articles)}件",
+            f"コンプライアンス: {status}",
+        ]
+    )
+    border_style = "green" if pack.passed_compliance else "yellow"
+    console.print(Panel(markdown, title="Content Pack", border_style=border_style))

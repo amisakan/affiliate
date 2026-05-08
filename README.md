@@ -211,6 +211,24 @@ Markdownに保存:
 uv run python -m affiliate_os generate-note-articles --output-path outputs/generated/note_articles.md
 ```
 
+X投稿案、note記事下書き、コンプライアンス概要をまとめて生成:
+
+```bash
+uv run python -m affiliate_os generate-content-pack
+```
+
+特定の案件だけまとめて生成:
+
+```bash
+uv run python -m affiliate_os generate-content-pack --offer-id OFF-0001
+```
+
+保存先を指定:
+
+```bash
+uv run python -m affiliate_os generate-content-pack --output-dir outputs/generated/content_pack
+```
+
 検出対象の例:
 
 - 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」
