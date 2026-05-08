@@ -11,6 +11,8 @@ MAX_X_POST_LENGTH = 280
 DEFAULT_X_POSTS_OUTPUT_PATH = Path("outputs") / "generated" / "x_posts.md"
 DEFAULT_NOTE_ARTICLES_OUTPUT_PATH = Path("outputs") / "generated" / "note_articles.md"
 DEFAULT_CONTENT_PACK_DIR = Path("outputs") / "generated" / "content_pack"
+CONTENT_TEMPLATES = ("comparison", "caution", "summary")
+DEFAULT_CONTENT_TEMPLATE = "comparison"
 
 
 @dataclass(frozen=True)
@@ -20,6 +22,7 @@ class XPostDraft:
     text: str
     compliance_report: ComplianceReport
     score: OfferScore | None = None
+    template: str = DEFAULT_CONTENT_TEMPLATE
 
     @property
     def passed_compliance(self) -> bool:
@@ -34,6 +37,7 @@ class NoteArticleDraft:
     markdown: str
     compliance_report: ComplianceReport
     score: OfferScore | None = None
+    template: str = DEFAULT_CONTENT_TEMPLATE
 
     @property
     def passed_compliance(self) -> bool:
@@ -54,24 +58,35 @@ class ContentPack:
         return all(draft.passed_compliance for draft in self.x_posts + self.note_articles)
 
 
-def generate_x_post_for_offer(offer: Offer, score: OfferScore | None = None) -> XPostDraft:
-    text = fit_x_post_length(build_x_post_text(offer, score=score))
+def generate_x_post_for_offer(
+    offer: Offer,
+    score: OfferScore | None = None,
+    template: str = DEFAULT_CONTENT_TEMPLATE,
+) -> XPostDraft:
+    template = normalize_content_template(template)
+    text = fit_x_post_length(build_x_post_text(offer, score=score, template=template))
     return XPostDraft(
         offer_id=offer.offer_id,
         offer_name=offer.offer_name,
         text=text,
         compliance_report=check_compliance(text),
         score=score,
+        template=template,
     )
 
 
 def generate_x_posts_for_offers(
     offers: list[Offer],
     scores: list[OfferScore] | None = None,
+    template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> list[XPostDraft]:
     scores_by_offer_id = map_scores_by_offer_id(scores)
     return [
-        generate_x_post_for_offer(offer, score=scores_by_offer_id.get(offer.offer_id))
+        generate_x_post_for_offer(
+            offer,
+            score=scores_by_offer_id.get(offer.offer_id),
+            template=template,
+        )
         for offer in offers
     ]
 
@@ -79,9 +94,11 @@ def generate_x_posts_for_offers(
 def generate_note_article_for_offer(
     offer: Offer,
     score: OfferScore | None = None,
+    template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> NoteArticleDraft:
-    title = build_note_article_title(offer)
-    markdown = build_note_article_markdown(offer, title, score=score)
+    template = normalize_content_template(template)
+    title = build_note_article_title(offer, template=template)
+    markdown = build_note_article_markdown(offer, title, score=score, template=template)
     return NoteArticleDraft(
         offer_id=offer.offer_id,
         offer_name=offer.offer_name,
@@ -89,16 +106,22 @@ def generate_note_article_for_offer(
         markdown=markdown,
         compliance_report=check_compliance(markdown),
         score=score,
+        template=template,
     )
 
 
 def generate_note_articles_for_offers(
     offers: list[Offer],
     scores: list[OfferScore] | None = None,
+    template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> list[NoteArticleDraft]:
     scores_by_offer_id = map_scores_by_offer_id(scores)
     return [
-        generate_note_article_for_offer(offer, score=scores_by_offer_id.get(offer.offer_id))
+        generate_note_article_for_offer(
+            offer,
+            score=scores_by_offer_id.get(offer.offer_id),
+            template=template,
+        )
         for offer in offers
     ]
 
@@ -107,10 +130,12 @@ def generate_content_pack(
     offers: list[Offer],
     output_dir: Path,
     include_scores: bool = False,
+    template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> ContentPack:
+    template = normalize_content_template(template)
     scores = score_offers(offers) if include_scores else None
-    x_posts = generate_x_posts_for_offers(offers, scores=scores)
-    note_articles = generate_note_articles_for_offers(offers, scores=scores)
+    x_posts = generate_x_posts_for_offers(offers, scores=scores, template=template)
+    note_articles = generate_note_articles_for_offers(offers, scores=scores, template=template)
     x_posts_path = output_dir / "x_posts.md"
     note_articles_path = output_dir / "note_articles.md"
     compliance_summary_path = output_dir / "compliance_summary.md"
@@ -141,25 +166,56 @@ def map_scores_by_offer_id(scores: list[OfferScore] | None) -> dict[str, OfferSc
     return {score.offer_id: score for score in scores}
 
 
-def build_x_post_text(offer: Offer, score: OfferScore | None = None) -> str:
+def normalize_content_template(template: str) -> str:
+    normalized = template.strip().lower()
+    if normalized not in CONTENT_TEMPLATES:
+        allowed = ", ".join(CONTENT_TEMPLATES)
+        raise ValueError(f"unknown content template: {template}. allowed: {allowed}")
+    return normalized
+
+
+def build_x_post_text(
+    offer: Offer,
+    score: OfferScore | None = None,
+    template: str = DEFAULT_CONTENT_TEMPLATE,
+) -> str:
+    template = normalize_content_template(template)
     target = offer.target or "検討している人"
     problem = offer.problem or "自分に合うか判断したい"
     benefit = offer.benefit or "選択肢のひとつとして比較できます"
     caution = build_offer_caution(offer)
     score_note = build_score_note(score)
 
-    text = (
-        f"{target}向けの比較メモ。\n"
-        f"{offer.offer_name}は、{problem}と感じている人が検討できる案件です。\n"
-        f"見るポイント: {benefit}。\n"
-        f"確認したい点: {caution}"
-    )
+    if template == "caution":
+        text = (
+            f"{offer.offer_name}の確認メモ。\n"
+            f"検討前に見る点: {caution}。\n"
+            f"{target}は、公式情報と条件を確認してから比較すると判断しやすくなります。"
+        )
+    elif template == "summary":
+        text = (
+            f"{offer.offer_name}は、{problem}人向けの比較候補です。\n"
+            f"要点: {benefit}。\n"
+            f"確認: {caution}"
+        )
+    else:
+        text = (
+            f"{target}向けの比較メモ。\n"
+            f"{offer.offer_name}は、{problem}と感じている人が検討できる案件です。\n"
+            f"見るポイント: {benefit}。\n"
+            f"確認したい点: {caution}"
+        )
     if score_note:
         text += f"\n評価メモ: {score_note}"
     return text
 
 
-def build_note_article_title(offer: Offer) -> str:
+def build_note_article_title(offer: Offer, template: str = DEFAULT_CONTENT_TEMPLATE) -> str:
+    template = normalize_content_template(template)
+    if template == "caution":
+        return f"{offer.offer_name}の申し込み前チェックリスト"
+    if template == "summary":
+        return f"{offer.offer_name}の要点整理"
     return f"{offer.offer_name}を検討するときの確認メモ"
 
 
@@ -167,7 +223,9 @@ def build_note_article_markdown(
     offer: Offer,
     title: str,
     score: OfferScore | None = None,
+    template: str = DEFAULT_CONTENT_TEMPLATE,
 ) -> str:
+    template = normalize_content_template(template)
     target = offer.target or "この案件を検討している人"
     problem = offer.problem or "自分に合うか判断したい"
     benefit = offer.benefit or "比較候補として確認できます"
@@ -203,6 +261,30 @@ def build_note_article_markdown(
         f"- リスクレベル: {offer.risk_level or '要確認'}",
         f"- その他: {caution}",
     ]
+    if template == "caution":
+        sections.extend(
+            [
+                "",
+                "## チェックリスト",
+                "",
+                "- 公式ページの最新条件を確認する",
+                "- 成果条件と否認条件を確認する",
+                "- 自分の目的、予算、時間に合うか確認する",
+                "- 医療、転職、金融領域に関わる場合は断定表現を避ける",
+            ]
+        )
+    elif template == "summary":
+        sections.extend(
+            [
+                "",
+                "## 要点",
+                "",
+                f"- 検討対象: {offer.offer_name}",
+                f"- 想定読者: {target}",
+                f"- 比較ポイント: {benefit}",
+                f"- 確認事項: {caution}",
+            ]
+        )
     if score is not None:
         sections.extend(
             [
@@ -299,6 +381,7 @@ def format_x_posts_markdown(drafts: list[XPostDraft]) -> str:
                 f"## {draft.offer_id}: {draft.offer_name}",
                 "",
                 f"- compliance: {status}",
+                f"- template: {draft.template}",
                 "",
                 "```text",
                 draft.text,
@@ -317,6 +400,7 @@ def format_note_articles_markdown(drafts: list[NoteArticleDraft]) -> str:
             [
                 f"<!-- offer_id: {draft.offer_id} -->",
                 f"<!-- compliance: {status} -->",
+                f"<!-- template: {draft.template} -->",
                 "",
                 draft.markdown,
                 "",
