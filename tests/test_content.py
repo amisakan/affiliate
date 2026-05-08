@@ -15,6 +15,7 @@ from affiliate_os.content import (
     write_x_posts_markdown,
 )
 from affiliate_os.models import Offer
+from affiliate_os.scoring import score_offer
 
 
 def make_offer(
@@ -52,6 +53,17 @@ def test_generate_x_post_for_offer_creates_compliant_decision_support_text():
     assert "比較" in draft.text
     assert "誰でも簡単" not in draft.text
     assert "必ず稼げる" not in draft.text
+
+
+def test_generate_x_post_can_include_score_context():
+    offer = make_offer()
+    score = score_offer(offer)
+
+    draft = generate_x_post_for_offer(offer, score=score)
+
+    assert draft.score == score
+    assert "評価メモ:" in draft.text
+    assert score.recommendation in draft.text
 
 
 def test_generate_x_post_truncates_long_text():
@@ -112,6 +124,18 @@ def test_generate_note_article_for_offer_creates_compliant_markdown():
     assert "月100万円確定" not in draft.markdown
 
 
+def test_generate_note_article_can_include_score_context():
+    offer = make_offer()
+    score = score_offer(offer)
+
+    draft = generate_note_article_for_offer(offer, score=score)
+
+    assert draft.score == score
+    assert "## affiliate-os評価メモ" in draft.markdown
+    assert f"- 総合スコア: {score.total_score}/100" in draft.markdown
+    assert f"- 判定: {score.recommendation}" in draft.markdown
+
+
 def test_generate_note_articles_for_offers_keeps_order():
     offers = [make_offer("OFF-0001"), make_offer("OFF-0002")]
 
@@ -142,7 +166,7 @@ def test_format_compliance_summary_markdown():
     assert "# Compliance Summary" in text
     assert "## X Posts" in text
     assert "## Note Articles" in text
-    assert "| OFF-0001 | passed | 0 | 0 |" in text
+    assert "| OFF-0001 | passed | - | - | 0 | 0 |" in text
 
 
 def test_generate_content_pack_writes_all_outputs(tmp_path):
@@ -158,3 +182,15 @@ def test_generate_content_pack_writes_all_outputs(tmp_path):
     assert "X Post Drafts" in pack.x_posts_path.read_text(encoding="utf-8")
     assert "Note Article Drafts" in pack.note_articles_path.read_text(encoding="utf-8")
     assert "Compliance Summary" in pack.compliance_summary_path.read_text(encoding="utf-8")
+
+
+def test_generate_content_pack_can_include_scores(tmp_path):
+    output_dir = tmp_path / "content_pack"
+
+    pack = generate_content_pack([make_offer()], output_dir, include_scores=True)
+    summary = pack.compliance_summary_path.read_text(encoding="utf-8")
+
+    assert pack.x_posts[0].score is not None
+    assert pack.note_articles[0].score is not None
+    assert "Recommendation" in summary
+    assert pack.x_posts[0].score.recommendation in summary

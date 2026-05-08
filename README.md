@@ -181,6 +181,12 @@ X投稿案を生成:
 uv run python -m affiliate_os generate-x-posts
 ```
 
+スコアリング結果を反映:
+
+```bash
+uv run python -m affiliate_os generate-x-posts --with-scores
+```
+
 特定の案件だけ生成:
 
 ```bash
@@ -199,6 +205,12 @@ note記事下書きを生成:
 uv run python -m affiliate_os generate-note-articles
 ```
 
+スコアリング結果を反映:
+
+```bash
+uv run python -m affiliate_os generate-note-articles --with-scores
+```
+
 特定の案件だけ生成:
 
 ```bash
@@ -215,6 +227,12 @@ X投稿案、note記事下書き、コンプライアンス概要をまとめて
 
 ```bash
 uv run python -m affiliate_os generate-content-pack
+```
+
+スコアリング結果もまとめて反映:
+
+```bash
+uv run python -m affiliate_os generate-content-pack --with-scores
 ```
 
 特定の案件だけまとめて生成:
