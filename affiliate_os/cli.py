@@ -9,7 +9,9 @@ import typer
 from affiliate_os.compliance import check_compliance, check_offers_compliance
 from affiliate_os.content import (
     filter_offers_by_id,
+    generate_note_articles_for_offers,
     generate_x_posts_for_offers,
+    write_note_articles_markdown,
     write_x_posts_markdown,
 )
 from affiliate_os.importers.reviewer import (
@@ -34,6 +36,7 @@ from affiliate_os.utils import (
     ask_required,
     console,
     render_compliance_report,
+    render_note_article_drafts,
     render_offer_detail,
     render_offer_draft,
     render_offer_table,
@@ -190,6 +193,28 @@ def generate_x_posts(
     if output_path:
         saved_path = write_x_posts_markdown(drafts, output_path)
         console.print(f"[green]X投稿案を保存しました: {saved_path}[/green]")
+
+
+@app.command("generate-note-articles")
+def generate_note_articles(
+    offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
+    data_path: Path = typer.Option(
+        DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
+    ),
+    output_path: Path | None = typer.Option(
+        None, "--output-path", help="Markdown保存先。未指定時は保存しません"
+    ),
+) -> None:
+    """登録済み案件からnote記事下書きを生成します。"""
+    offers = filter_offers_by_id(load_offers(data_path), offer_id)
+    drafts = generate_note_articles_for_offers(offers)
+    render_note_article_drafts(drafts)
+    if offer_id and not drafts:
+        console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
+        return
+    if output_path:
+        saved_path = write_note_articles_markdown(drafts, output_path)
+        console.print(f"[green]note記事下書きを保存しました: {saved_path}[/green]")
 
 
 def read_check_target(text: str | None, file_path: Path | None) -> str:
