@@ -7,6 +7,11 @@ from pathlib import Path
 import typer
 
 from affiliate_os.compliance import check_compliance, check_offers_compliance
+from affiliate_os.content import (
+    filter_offers_by_id,
+    generate_x_posts_for_offers,
+    write_x_posts_markdown,
+)
 from affiliate_os.importers.reviewer import (
     build_offer_from_draft,
     complete_required_fields,
@@ -34,6 +39,7 @@ from affiliate_os.utils import (
     render_offer_table,
     render_offers_compliance_reports,
     render_score_ranking,
+    render_x_post_drafts,
 )
 
 app = typer.Typer(help="信頼型アフィリエイト運用OSのMVP CLI")
@@ -162,6 +168,28 @@ def check_offers(
     offers = load_offers(data_path)
     reports = check_offers_compliance(offers)
     render_offers_compliance_reports(reports)
+
+
+@app.command("generate-x-posts")
+def generate_x_posts(
+    offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
+    data_path: Path = typer.Option(
+        DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
+    ),
+    output_path: Path | None = typer.Option(
+        None, "--output-path", help="Markdown保存先。未指定時は保存しません"
+    ),
+) -> None:
+    """登録済み案件から信頼型のX投稿案を生成します。"""
+    offers = filter_offers_by_id(load_offers(data_path), offer_id)
+    drafts = generate_x_posts_for_offers(offers)
+    render_x_post_drafts(drafts)
+    if offer_id and not drafts:
+        console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
+        return
+    if output_path:
+        saved_path = write_x_posts_markdown(drafts, output_path)
+        console.print(f"[green]X投稿案を保存しました: {saved_path}[/green]")
 
 
 def read_check_target(text: str | None, file_path: Path | None) -> str:
