@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from affiliate_os.content import (
+    CONTENT_TEMPLATES,
     MAX_X_POST_LENGTH,
     filter_offers_by_id,
     format_compliance_summary_markdown,
@@ -11,6 +12,7 @@ from affiliate_os.content import (
     generate_note_articles_for_offers,
     generate_x_post_for_offer,
     generate_x_posts_for_offers,
+    normalize_content_template,
     write_note_articles_markdown,
     write_x_posts_markdown,
 )
@@ -66,6 +68,15 @@ def test_generate_x_post_can_include_score_context():
     assert score.recommendation in draft.text
 
 
+def test_generate_x_post_supports_caution_template():
+    draft = generate_x_post_for_offer(make_offer(), template="caution")
+
+    assert draft.template == "caution"
+    assert "確認メモ" in draft.text
+    assert "検討前に見る点" in draft.text
+    assert draft.passed_compliance
+
+
 def test_generate_x_post_truncates_long_text():
     offer = make_offer(
         offer_name="とても長い名前のAI講座" * 20,
@@ -109,6 +120,7 @@ def test_format_and_write_x_posts_markdown(tmp_path):
     assert format_x_posts_markdown([draft]) == text
     assert "# X Post Drafts" in text
     assert "OFF-0001" in text
+    assert "- template: comparison" in text
 
 
 def test_generate_note_article_for_offer_creates_compliant_markdown():
@@ -136,6 +148,15 @@ def test_generate_note_article_can_include_score_context():
     assert f"- 判定: {score.recommendation}" in draft.markdown
 
 
+def test_generate_note_article_supports_summary_template():
+    draft = generate_note_article_for_offer(make_offer(), template="summary")
+
+    assert draft.template == "summary"
+    assert draft.title == "AI講座の要点整理"
+    assert "## 要点" in draft.markdown
+    assert draft.passed_compliance
+
+
 def test_generate_note_articles_for_offers_keeps_order():
     offers = [make_offer("OFF-0001"), make_offer("OFF-0002")]
 
@@ -155,6 +176,7 @@ def test_format_and_write_note_articles_markdown(tmp_path):
     assert format_note_articles_markdown([draft]) == text
     assert "# Note Article Drafts" in text
     assert "<!-- offer_id: OFF-0001 -->" in text
+    assert "<!-- template: comparison -->" in text
 
 
 def test_format_compliance_summary_markdown():
@@ -194,3 +216,18 @@ def test_generate_content_pack_can_include_scores(tmp_path):
     assert pack.note_articles[0].score is not None
     assert "Recommendation" in summary
     assert pack.x_posts[0].score.recommendation in summary
+
+
+def test_generate_content_pack_can_use_template(tmp_path):
+    output_dir = tmp_path / "content_pack"
+
+    pack = generate_content_pack([make_offer()], output_dir, template="caution")
+
+    assert pack.x_posts[0].template == "caution"
+    assert pack.note_articles[0].template == "caution"
+    assert "チェックリスト" in pack.note_articles_path.read_text(encoding="utf-8")
+
+
+def test_normalize_content_template_validates_known_templates():
+    assert normalize_content_template(" SUMMARY ") == "summary"
+    assert set(CONTENT_TEMPLATES) == {"comparison", "caution", "summary"}

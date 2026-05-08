@@ -187,6 +187,12 @@ uv run python -m affiliate_os generate-x-posts
 uv run python -m affiliate_os generate-x-posts --with-scores
 ```
 
+テンプレートを選択:
+
+```bash
+uv run python -m affiliate_os generate-x-posts --template caution
+```
+
 特定の案件だけ生成:
 
 ```bash
@@ -211,6 +217,12 @@ uv run python -m affiliate_os generate-note-articles
 uv run python -m affiliate_os generate-note-articles --with-scores
 ```
 
+テンプレートを選択:
+
+```bash
+uv run python -m affiliate_os generate-note-articles --template summary
+```
+
 特定の案件だけ生成:
 
 ```bash
@@ -233,6 +245,12 @@ uv run python -m affiliate_os generate-content-pack
 
 ```bash
 uv run python -m affiliate_os generate-content-pack --with-scores
+```
+
+テンプレートを選択:
+
+```bash
+uv run python -m affiliate_os generate-content-pack --template caution
 ```
 
 特定の案件だけまとめて生成:

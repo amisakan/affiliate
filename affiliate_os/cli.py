@@ -8,11 +8,13 @@ import typer
 
 from affiliate_os.compliance import check_compliance, check_offers_compliance
 from affiliate_os.content import (
+    CONTENT_TEMPLATES,
     DEFAULT_CONTENT_PACK_DIR,
     filter_offers_by_id,
     generate_content_pack,
     generate_note_articles_for_offers,
     generate_x_posts_for_offers,
+    normalize_content_template,
     write_note_articles_markdown,
     write_x_posts_markdown,
 )
@@ -180,6 +182,9 @@ def check_offers(
 def generate_x_posts(
     offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
     with_scores: bool = typer.Option(False, "--with-scores", help="スコアリング結果を反映"),
+    template: str = typer.Option(
+        "comparison", "--template", help=f"生成テンプレート: {', '.join(CONTENT_TEMPLATES)}"
+    ),
     data_path: Path = typer.Option(
         DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
     ),
@@ -188,9 +193,10 @@ def generate_x_posts(
     ),
 ) -> None:
     """登録済み案件から信頼型のX投稿案を生成します。"""
+    template = parse_content_template(template)
     offers = filter_offers_by_id(load_offers(data_path), offer_id)
     scores = score_offers(offers) if with_scores else None
-    drafts = generate_x_posts_for_offers(offers, scores=scores)
+    drafts = generate_x_posts_for_offers(offers, scores=scores, template=template)
     render_x_post_drafts(drafts)
     if offer_id and not drafts:
         console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
@@ -204,6 +210,9 @@ def generate_x_posts(
 def generate_note_articles(
     offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
     with_scores: bool = typer.Option(False, "--with-scores", help="スコアリング結果を反映"),
+    template: str = typer.Option(
+        "comparison", "--template", help=f"生成テンプレート: {', '.join(CONTENT_TEMPLATES)}"
+    ),
     data_path: Path = typer.Option(
         DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
     ),
@@ -212,9 +221,10 @@ def generate_note_articles(
     ),
 ) -> None:
     """登録済み案件からnote記事下書きを生成します。"""
+    template = parse_content_template(template)
     offers = filter_offers_by_id(load_offers(data_path), offer_id)
     scores = score_offers(offers) if with_scores else None
-    drafts = generate_note_articles_for_offers(offers, scores=scores)
+    drafts = generate_note_articles_for_offers(offers, scores=scores, template=template)
     render_note_article_drafts(drafts)
     if offer_id and not drafts:
         console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
@@ -228,6 +238,9 @@ def generate_note_articles(
 def generate_content_pack_command(
     offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
     with_scores: bool = typer.Option(False, "--with-scores", help="スコアリング結果を反映"),
+    template: str = typer.Option(
+        "comparison", "--template", help=f"生成テンプレート: {', '.join(CONTENT_TEMPLATES)}"
+    ),
     data_path: Path = typer.Option(
         DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
     ),
@@ -236,11 +249,17 @@ def generate_content_pack_command(
     ),
 ) -> None:
     """X投稿案、note記事下書き、コンプライアンス概要をまとめて生成します。"""
+    template = parse_content_template(template)
     offers = filter_offers_by_id(load_offers(data_path), offer_id)
     if offer_id and not offers:
         console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
         return
-    pack = generate_content_pack(offers, output_dir, include_scores=with_scores)
+    pack = generate_content_pack(
+        offers,
+        output_dir,
+        include_scores=with_scores,
+        template=template,
+    )
     render_content_pack(pack)
 
 
@@ -254,6 +273,13 @@ def read_check_target(text: str | None, file_path: Path | None) -> str:
     if text:
         return text
     raise typer.BadParameter("チェック対象テキスト、または --file を指定してください。")
+
+
+def parse_content_template(value: str) -> str:
+    try:
+        return normalize_content_template(value)
+    except ValueError as exc:
+        raise typer.BadParameter(str(exc)) from exc
 
 
 def parse_min_reward(value: str | None) -> Decimal | None:
