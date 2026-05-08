@@ -5,10 +5,13 @@ from affiliate_os.models import Offer
 from affiliate_os.scoring import (
     approval_rate_score,
     cookie_days_score,
+    explain_score,
+    explain_scores,
     recommendation_for,
     reward_score,
     score_offer,
     score_offers,
+    write_score_explanations_markdown,
     write_scores_csv,
 )
 
@@ -92,3 +95,44 @@ def test_recommendation_thresholds():
     assert recommendation_for(80, 70, 60) == "推奨"
     assert recommendation_for(60, 70, 60) == "保留"
     assert recommendation_for(80, 20, 60) == "非推奨"
+
+
+def test_explain_score_returns_reason_markdown():
+    explanation = explain_score(
+        make_offer(memo="否認条件: 本人申込NG"),
+        scored_at=datetime(2026, 5, 8, 11, 0),
+    )
+
+    markdown = explanation.to_markdown()
+
+    assert explanation.score.offer_id == "OFF-0001"
+    assert len(explanation.reasons) == 8
+    assert "# Offer OFF-0001" in markdown
+    assert "## スコア理由" in markdown
+    assert "報酬単価" in markdown
+    assert "成果条件・否認条件" in explanation.score.risk_comment
+
+
+def test_explain_scores_sorts_by_total_score():
+    stronger = make_offer("OFF-0001", reward="50000", approval_rate="85%", brand_fit="高")
+    weaker = make_offer(
+        "OFF-0002", reward="3000", approval_rate="20%", brand_fit="低", risk_level="高"
+    )
+
+    explanations = explain_scores([weaker, stronger], scored_at=datetime(2026, 5, 8, 11, 0))
+
+    assert [explanation.score.offer_id for explanation in explanations] == [
+        "OFF-0001",
+        "OFF-0002",
+    ]
+
+
+def test_write_score_explanations_markdown(tmp_path):
+    output_path = tmp_path / "score_explanations.md"
+    explanations = [explain_score(make_offer(), scored_at=datetime(2026, 5, 8, 11, 0))]
+
+    write_score_explanations_markdown(explanations, output_path)
+
+    text = output_path.read_text(encoding="utf-8")
+    assert "## スコア理由" in text
+    assert "### 報酬単価" in text

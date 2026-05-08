@@ -151,6 +151,18 @@ uv run python -m affiliate_os list-offers --min-reward 30000
 uv run python -m affiliate_os score-offers
 ```
 
+スコア理由を表示:
+
+```bash
+uv run python -m affiliate_os explain-scores
+```
+
+特定案件のスコア理由を保存:
+
+```bash
+uv run python -m affiliate_os explain-scores --offer-id OFF-0001 --output-path outputs/generated/score_explanations.md
+```
+
 コンプライアンスチェック:
 
 ```bash

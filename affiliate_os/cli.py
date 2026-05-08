@@ -25,7 +25,13 @@ from affiliate_os.importers.reviewer import (
 )
 from affiliate_os.importers.vision_importer import extract_offer_from_image
 from affiliate_os.models import Offer
-from affiliate_os.scoring import DEFAULT_SCORES_PATH, score_offers, write_scores_csv
+from affiliate_os.scoring import (
+    DEFAULT_SCORES_PATH,
+    explain_scores,
+    score_offers,
+    write_score_explanations_markdown,
+    write_scores_csv,
+)
 from affiliate_os.storage import (
     DEFAULT_DATA_PATH,
     append_offer,
@@ -46,6 +52,7 @@ from affiliate_os.utils import (
     render_offer_draft,
     render_offer_table,
     render_offers_compliance_reports,
+    render_score_explanations,
     render_score_ranking,
     render_x_post_drafts,
 )
@@ -153,6 +160,28 @@ def score_offers_command(
     write_scores_csv(scores, output_path)
     console.print(f"[green]スコアを保存しました: {output_path}[/green]")
     render_score_ranking(scores)
+
+
+@app.command("explain-scores")
+def explain_scores_command(
+    offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ表示"),
+    data_path: Path = typer.Option(
+        DEFAULT_DATA_PATH, "--data-path", help="offers.csv の読み込み先"
+    ),
+    output_path: Path | None = typer.Option(
+        None, "--output-path", help="Markdown保存先。未指定時は保存しません"
+    ),
+) -> None:
+    """登録済み案件のスコア理由を表示します。"""
+    offers = filter_offers_by_id(load_offers(data_path), offer_id)
+    if offer_id and not offers:
+        console.print(f"[yellow]案件IDが見つかりません: {offer_id}[/yellow]")
+        return
+    explanations = explain_scores(offers)
+    render_score_explanations(explanations)
+    if output_path:
+        saved_path = write_score_explanations_markdown(explanations, output_path)
+        console.print(f"[green]スコア理由を保存しました: {saved_path}[/green]")
 
 
 @app.command("check-text")
