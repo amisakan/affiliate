@@ -30,9 +30,12 @@ from affiliate_os.reviews import (
     DEFAULT_APPROVED_CONTENT_OUTPUT_PATH,
     DEFAULT_CONTENT_REVIEWS_MARKDOWN_PATH,
     DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH,
+    DEFAULT_REVISION_SUGGESTIONS_MARKDOWN_PATH,
+    DEFAULT_REVISION_SUGGESTIONS_OUTPUT_PATH,
     REVIEW_STATUSES,
     approved_content_reviews,
     build_content_reviews,
+    build_revision_suggestions,
     load_content_reviews_csv,
     normalize_review_status,
     update_content_review_csv,
@@ -40,6 +43,8 @@ from affiliate_os.reviews import (
     write_approved_content_markdown,
     write_content_reviews_csv,
     write_content_reviews_markdown,
+    write_revision_suggestions_csv,
+    write_revision_suggestions_markdown,
 )
 from affiliate_os.scoring import (
     DEFAULT_SCORES_PATH,
@@ -448,6 +453,41 @@ def list_approved_content_command(
         target_path = output_path or DEFAULT_APPROVED_CONTENT_OUTPUT_PATH
         saved_path = write_approved_content_csv(reviews, target_path)
     console.print(f"[green]公開候補リストを保存しました: {saved_path}[/green]")
+
+
+@app.command("suggest-content-revisions")
+def suggest_content_revisions_command(
+    input_path: Path = typer.Option(
+        DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH,
+        "--input-path",
+        help="読み込むレビューCSV",
+    ),
+    output_format: str = typer.Option("markdown", "--format", help="出力形式: csv, markdown"),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output-path",
+        help="修正提案リストの保存先。未指定時は既定パスに保存",
+    ),
+) -> None:
+    """needs_revision の生成物に修正提案を付けて出力します。"""
+    if not input_path.exists():
+        raise typer.BadParameter(f"レビューCSVが見つかりません: {input_path}")
+    output_format = parse_review_output_format(output_format)
+    reviews = load_content_reviews_csv(input_path)
+    suggestions = build_revision_suggestions(reviews)
+    if suggestions:
+        revision_reviews = [review for review in reviews if review.status == "needs_revision"]
+        render_content_reviews(revision_reviews)
+    else:
+        console.print("[green]修正対象の生成物はありません。[/green]")
+
+    if output_format == "markdown":
+        target_path = output_path or DEFAULT_REVISION_SUGGESTIONS_MARKDOWN_PATH
+        saved_path = write_revision_suggestions_markdown(suggestions, target_path)
+    else:
+        target_path = output_path or DEFAULT_REVISION_SUGGESTIONS_OUTPUT_PATH
+        saved_path = write_revision_suggestions_csv(suggestions, target_path)
+    console.print(f"[green]修正提案リストを保存しました: {saved_path}[/green]")
 
 
 def read_check_target(text: str | None, file_path: Path | None) -> str:
