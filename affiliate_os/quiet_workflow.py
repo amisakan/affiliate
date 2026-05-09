@@ -537,6 +537,42 @@ def format_posts_index_markdown(posts: list[QuietWorkflowPostDraft]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def format_post_detail_markdown(post: QuietWorkflowPostDraft) -> str:
+    lines = [
+        f"# Quiet Workflow Post: {post.post_id}",
+        "",
+        f"- theme_id: {post.theme_id}",
+        f"- created_at: {post.created_at.isoformat(timespec='seconds')}",
+        "",
+        "## Post Text",
+        "",
+        "```text",
+        post.post_text,
+        "```",
+        "",
+        "## Image Concept",
+        "",
+        post.image_concept,
+        "",
+        "## Image Prompt",
+        "",
+        "```text",
+        post.image_prompt,
+        "```",
+        "",
+        "## Risk Notes",
+        "",
+        post.risk_notes,
+        "",
+        "## Publishing Check",
+        "",
+        "- 自動投稿しない",
+        "- 煽り、収益訴求、断定表現が混ざっていないか確認する",
+        "- 画像が黒背景、深緑、余白、ミニマルの方向に合っているか確認する",
+    ]
+    return "\n".join(lines).rstrip() + "\n"
+
+
 def write_text_markdown(markdown: str, output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(markdown, encoding="utf-8")

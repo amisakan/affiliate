@@ -13,6 +13,7 @@ from affiliate_os.quiet_workflow import (
     filter_themes,
     find_theme,
     format_metrics_summary_markdown,
+    format_post_detail_markdown,
     format_posts_index_markdown,
     format_posts_markdown,
     format_themes_index_markdown,
@@ -229,6 +230,22 @@ def test_format_themes_and_posts_index_markdown():
     assert "# Quiet Workflow Posts" in posts_markdown
     assert "QW-0001" in posts_markdown
     assert "### QW-0001" in posts_markdown
+
+
+def test_format_post_detail_markdown_includes_publish_check():
+    post = generate_quiet_workflow_posts(
+        make_theme(),
+        count=1,
+        created_at=datetime(2026, 5, 9, 9, 0),
+    )[0]
+
+    markdown = format_post_detail_markdown(post)
+
+    assert "# Quiet Workflow Post: QW-0001" in markdown
+    assert "## Post Text" in markdown
+    assert "## Image Prompt" in markdown
+    assert "## Publishing Check" in markdown
+    assert "自動投稿しない" in markdown
 
 
 def test_sanitize_quiet_workflow_text_removes_forbidden_phrases():

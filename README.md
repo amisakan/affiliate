@@ -215,6 +215,12 @@ uv run python -m affiliate_os list-themes
 uv run python -m affiliate_os list-posts --theme 001 --limit 5 --output-path outputs/posts/post_index.md
 ```
 
+投稿案を1件だけ詳細確認:
+
+```bash
+uv run python -m affiliate_os show-post QW-0001 --output-path outputs/posts/QW-0001.md
+```
+
 投稿後の指標を記録:
 
 ```bash

@@ -39,6 +39,7 @@ from affiliate_os.quiet_workflow import (
     find_post,
     find_theme,
     format_metrics_summary_markdown,
+    format_post_detail_markdown,
     format_posts_index_markdown,
     format_themes_index_markdown,
     generate_quiet_workflow_posts,
@@ -456,6 +457,32 @@ def list_posts_command(
     if output_path:
         saved_path = write_text_markdown(markdown, output_path)
         console.print(f"[green]投稿案一覧を保存しました: {saved_path}[/green]")
+
+
+@app.command("show-post")
+def show_post_command(
+    post_id: str = typer.Argument(..., help="表示する投稿ID。例: QW-0001"),
+    posts_path: Path = typer.Option(
+        DEFAULT_POSTS_PATH,
+        "--posts-path",
+        help="posts.csv の読み込み先",
+    ),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output-path",
+        help="Markdown保存先。未指定時は画面表示のみ",
+    ),
+) -> None:
+    """Quiet Workflow投稿案を1件だけ詳細表示します。"""
+    post = find_post(load_posts(posts_path), post_id)
+    if post is None:
+        console.print(f"[yellow]投稿IDが見つかりません: {post_id}[/yellow]")
+        return
+    markdown = format_post_detail_markdown(post)
+    console.print(markdown)
+    if output_path:
+        saved_path = write_text_markdown(markdown, output_path)
+        console.print(f"[green]投稿案詳細を保存しました: {saved_path}[/green]")
 
 
 @app.command("record-post-metrics")
