@@ -345,6 +345,20 @@ uv run python -m affiliate_os rewrite-content-drafts --output-path outputs/gener
 
 リライト案は自動公開されません。公開前に公式条件、成果条件、否認条件、費用、返金条件、追加費用の有無を確認してください。
 
+リライト案の本文だけを再度コンプライアンスチェック:
+
+```bash
+uv run python -m affiliate_os check-rewrite-drafts --input-path outputs/generated/rewrite_content_drafts.md
+```
+
+チェック結果の保存先を指定:
+
+```bash
+uv run python -m affiliate_os check-rewrite-drafts --output-path outputs/generated/rewrite_content_checks.md
+```
+
+`check-rewrite-drafts` はリライト案のコードブロックだけを対象にします。元プレビューに残った修正前の表現は監査用に保持しつつ、リライト本文の判定とは分けます。
+
 検出対象の例:
 
 - 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」

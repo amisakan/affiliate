@@ -9,11 +9,14 @@ from affiliate_os.reviews import (
     build_content_reviews,
     build_content_rewrite_drafts,
     build_revision_suggestions,
+    check_content_rewrite_drafts_markdown,
     content_preview,
+    extract_rewrite_draft_markdown_blocks,
     format_approved_content_markdown,
     format_content_reviews_markdown,
     format_content_rewrite_drafts_markdown,
     format_revision_suggestions_markdown,
+    format_rewrite_draft_checks_markdown,
     load_content_reviews_csv,
     needs_revision_reviews,
     normalize_review_status,
@@ -26,6 +29,7 @@ from affiliate_os.reviews import (
     write_content_rewrite_drafts_markdown,
     write_revision_suggestions_csv,
     write_revision_suggestions_markdown,
+    write_rewrite_draft_checks_markdown,
 )
 from affiliate_os.scoring import explain_score
 
@@ -391,6 +395,96 @@ def test_write_content_rewrite_drafts_markdown(tmp_path):
     assert "# Rewrite Content Drafts" in text
     assert "自動公開はしません" in text
     assert "x_post:OFF-0001" in text
+
+
+def test_extract_rewrite_draft_markdown_blocks_only_reads_fenced_drafts():
+    markdown = """# Rewrite Content Drafts
+
+### x_post:OFF-0001
+
+```markdown
+安全なリライト案です。
+```
+
+元プレビュー:
+
+> 誰でも簡単
+
+### note_article:OFF-0001
+
+```markdown
+# 記事案
+
+公式条件を確認してください。
+```
+"""
+
+    blocks = extract_rewrite_draft_markdown_blocks(markdown)
+
+    assert blocks == [
+        ("x_post:OFF-0001", "安全なリライト案です。"),
+        ("note_article:OFF-0001", "# 記事案\n\n公式条件を確認してください。"),
+    ]
+
+
+def test_check_content_rewrite_drafts_markdown_ignores_source_preview_risks():
+    markdown = """# Rewrite Content Drafts
+
+### x_post:OFF-0001
+
+```markdown
+公式条件、成果条件、否認条件、費用を確認して判断してください。
+```
+
+元プレビュー:
+
+> 誰でも簡単に月100万円確定です
+"""
+
+    checks = check_content_rewrite_drafts_markdown(markdown)
+
+    assert len(checks) == 1
+    assert checks[0].review_id == "x_post:OFF-0001"
+    assert checks[0].passed
+
+
+def test_check_content_rewrite_drafts_markdown_flags_risky_draft_text():
+    markdown = """# Rewrite Content Drafts
+
+### x_post:OFF-0001
+
+```markdown
+誰でも簡単に成果が出ます。
+```
+"""
+
+    checks = check_content_rewrite_drafts_markdown(markdown)
+
+    assert len(checks) == 1
+    assert not checks[0].passed
+    assert checks[0].compliance_report.high_risk_count == 1
+
+
+def test_write_rewrite_draft_checks_markdown(tmp_path):
+    markdown = """# Rewrite Content Drafts
+
+### x_post:OFF-0001
+
+```markdown
+誰でも簡単に成果が出ます。
+```
+"""
+    checks = check_content_rewrite_drafts_markdown(markdown)
+    output_path = tmp_path / "rewrite_content_checks.md"
+
+    saved_path = write_rewrite_draft_checks_markdown(checks, output_path)
+    text = output_path.read_text(encoding="utf-8")
+
+    assert saved_path == output_path
+    assert format_rewrite_draft_checks_markdown(checks) == text
+    assert "# Rewrite Draft Compliance Checks" in text
+    assert "x_post:OFF-0001" in text
+    assert "needs_review" in text
 
 
 def test_write_content_reviews_markdown(tmp_path):
