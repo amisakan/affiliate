@@ -181,6 +181,24 @@ def find_theme(themes: list[QuietWorkflowTheme], theme_id: str) -> QuietWorkflow
     return None
 
 
+def filter_themes(
+    themes: list[QuietWorkflowTheme],
+    keyword: str | None = None,
+) -> list[QuietWorkflowTheme]:
+    if keyword is None:
+        return themes
+    normalized = keyword.strip().lower()
+    if not normalized:
+        return themes
+    return [
+        theme
+        for theme in themes
+        if normalized in quiet_search_text(
+            [theme.theme_id, theme.title, theme.focus, theme.keywords, theme.audience, theme.memo]
+        )
+    ]
+
+
 def load_posts(path: Path = DEFAULT_POSTS_PATH) -> list[QuietWorkflowPostDraft]:
     ensure_csv(path, POST_COLUMNS)
     with path.open("r", newline="", encoding="utf-8") as file:
@@ -218,6 +236,21 @@ def find_post(
         if post.post_id == normalized:
             return post
     return None
+
+
+def filter_posts(
+    posts: list[QuietWorkflowPostDraft],
+    theme_id: str | None = None,
+    limit: int | None = None,
+) -> list[QuietWorkflowPostDraft]:
+    filtered = posts
+    if theme_id:
+        normalized_theme_id = theme_id.strip()
+        filtered = [post for post in filtered if post.theme_id == normalized_theme_id]
+    filtered = sorted(filtered, key=lambda post: (post.created_at, post.post_id), reverse=True)
+    if limit is not None:
+        filtered = filtered[:limit]
+    return filtered
 
 
 def next_post_number(posts: list[QuietWorkflowPostDraft]) -> int:
@@ -431,6 +464,85 @@ def format_posts_markdown(posts: list[QuietWorkflowPostDraft]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def format_themes_index_markdown(themes: list[QuietWorkflowTheme]) -> str:
+    lines = [
+        "# Quiet Workflow Themes",
+        "",
+        "| Theme ID | Title | Focus | Audience |",
+        "| --- | --- | --- | --- |",
+    ]
+    if not themes:
+        lines.append("| - | no themes | - | - |")
+        return "\n".join(lines) + "\n"
+
+    for theme in themes:
+        lines.append(
+            "| "
+            f"{theme.theme_id} | "
+            f"{theme.title} | "
+            f"{theme.focus or '-'} | "
+            f"{theme.audience or '-'} |"
+        )
+    lines.extend(["", "## Notes", ""])
+    for theme in themes:
+        if theme.keywords or theme.memo:
+            lines.extend(
+                [
+                    f"### {theme.theme_id}",
+                    "",
+                    f"- keywords: {theme.keywords or '-'}",
+                    f"- memo: {theme.memo or '-'}",
+                    "",
+                ]
+            )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def format_posts_index_markdown(posts: list[QuietWorkflowPostDraft]) -> str:
+    lines = [
+        "# Quiet Workflow Posts",
+        "",
+        "| Post ID | Theme | Created At | Preview |",
+        "| --- | --- | --- | --- |",
+    ]
+    if not posts:
+        lines.append("| - | - | - | no posts |")
+        return "\n".join(lines) + "\n"
+
+    for post in posts:
+        lines.append(
+            "| "
+            f"{post.post_id} | "
+            f"{post.theme_id} | "
+            f"{post.created_at.isoformat(timespec='seconds')} | "
+            f"{content_preview(post.post_text, max_length=80)} |"
+        )
+
+    lines.extend(["", "## Details", ""])
+    for post in posts:
+        lines.extend(
+            [
+                f"### {post.post_id}",
+                "",
+                f"- theme_id: {post.theme_id}",
+                f"- image_concept: {post.image_concept}",
+                f"- risk_notes: {post.risk_notes}",
+                "",
+                "```text",
+                post.post_text,
+                "```",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def write_text_markdown(markdown: str, output_path: Path) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(markdown, encoding="utf-8")
+    return output_path
+
+
 def write_metrics_summary_markdown(
     metrics: list[QuietWorkflowMetric],
     output_path: Path,
@@ -477,6 +589,17 @@ def metric_sort_key(metric: QuietWorkflowMetric) -> tuple[float, float, int]:
 
 def format_rate(value: float) -> str:
     return f"{value * 100:.1f}%"
+
+
+def content_preview(text: str, max_length: int = 80) -> str:
+    normalized = " ".join(text.split())
+    if len(normalized) <= max_length:
+        return normalized
+    return normalized[: max_length - 1].rstrip() + "..."
+
+
+def quiet_search_text(values: list[str]) -> str:
+    return " ".join(value for value in values if value).lower()
 
 
 def parse_datetime(value: str) -> datetime:

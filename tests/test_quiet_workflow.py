@@ -9,9 +9,13 @@ from affiliate_os.quiet_workflow import (
     append_posts,
     build_post_metric,
     ensure_quiet_workflow_csvs,
+    filter_posts,
+    filter_themes,
     find_theme,
     format_metrics_summary_markdown,
+    format_posts_index_markdown,
     format_posts_markdown,
+    format_themes_index_markdown,
     generate_quiet_workflow_posts,
     load_metrics,
     load_posts,
@@ -63,6 +67,24 @@ def test_load_themes_and_find_theme(tmp_path):
     assert find_theme(themes, "999") is None
 
 
+def test_filter_themes_searches_title_keywords_and_memo():
+    themes = [
+        make_theme(),
+        QuietWorkflowTheme(
+            theme_id="002",
+            title="Researchログ",
+            focus="Research",
+            keywords="reading|notes",
+            audience="調査する人",
+            memo="問いを残す",
+        ),
+    ]
+
+    filtered = filter_themes(themes, keyword="reading")
+
+    assert [theme.theme_id for theme in filtered] == ["002"]
+
+
 def test_generate_quiet_workflow_posts_creates_required_fields():
     created_at = datetime(2026, 5, 9, 9, 0)
     posts = generate_quiet_workflow_posts(
@@ -95,6 +117,26 @@ def test_append_load_posts_and_next_post_number(tmp_path):
 
     assert [post.post_id for post in loaded] == ["QW-0001", "QW-0002"]
     assert next_post_number(loaded) == 3
+
+
+def test_filter_posts_by_theme_and_limit_sorts_newest_first():
+    first_theme_posts = generate_quiet_workflow_posts(
+        make_theme(),
+        count=2,
+        starting_number=1,
+        created_at=datetime(2026, 5, 9, 9, 0),
+    )
+    second_theme = QuietWorkflowTheme(theme_id="002", title="Researchログ")
+    second_theme_posts = generate_quiet_workflow_posts(
+        second_theme,
+        count=1,
+        starting_number=3,
+        created_at=datetime(2026, 5, 10, 9, 0),
+    )
+
+    filtered = filter_posts(first_theme_posts + second_theme_posts, theme_id="001", limit=1)
+
+    assert [post.post_id for post in filtered] == ["QW-0002"]
 
 
 def test_build_append_load_metric_and_rates(tmp_path):
@@ -169,6 +211,24 @@ def test_write_posts_markdown(tmp_path):
     assert "# Quiet Workflow Post Drafts" in text
     assert "### Image Prompt" in text
     assert "自動投稿" not in text
+
+
+def test_format_themes_and_posts_index_markdown():
+    theme = make_theme()
+    posts = generate_quiet_workflow_posts(
+        theme,
+        count=1,
+        created_at=datetime(2026, 5, 9, 9, 0),
+    )
+
+    themes_markdown = format_themes_index_markdown([theme])
+    posts_markdown = format_posts_index_markdown(posts)
+
+    assert "# Quiet Workflow Themes" in themes_markdown
+    assert "静かなAIワークフローの作り方" in themes_markdown
+    assert "# Quiet Workflow Posts" in posts_markdown
+    assert "QW-0001" in posts_markdown
+    assert "### QW-0001" in posts_markdown
 
 
 def test_sanitize_quiet_workflow_text_removes_forbidden_phrases():
