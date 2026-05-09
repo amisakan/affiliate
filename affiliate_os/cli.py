@@ -32,9 +32,11 @@ from affiliate_os.reviews import (
     DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH,
     DEFAULT_REVISION_SUGGESTIONS_MARKDOWN_PATH,
     DEFAULT_REVISION_SUGGESTIONS_OUTPUT_PATH,
+    DEFAULT_REWRITE_CONTENT_DRAFTS_MARKDOWN_PATH,
     REVIEW_STATUSES,
     approved_content_reviews,
     build_content_reviews,
+    build_content_rewrite_drafts,
     build_revision_suggestions,
     load_content_reviews_csv,
     normalize_review_status,
@@ -43,6 +45,7 @@ from affiliate_os.reviews import (
     write_approved_content_markdown,
     write_content_reviews_csv,
     write_content_reviews_markdown,
+    write_content_rewrite_drafts_markdown,
     write_revision_suggestions_csv,
     write_revision_suggestions_markdown,
 )
@@ -488,6 +491,35 @@ def suggest_content_revisions_command(
         target_path = output_path or DEFAULT_REVISION_SUGGESTIONS_OUTPUT_PATH
         saved_path = write_revision_suggestions_csv(suggestions, target_path)
     console.print(f"[green]修正提案リストを保存しました: {saved_path}[/green]")
+
+
+@app.command("rewrite-content-drafts")
+def rewrite_content_drafts_command(
+    input_path: Path = typer.Option(
+        DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH,
+        "--input-path",
+        help="読み込むレビューCSV",
+    ),
+    output_path: Path = typer.Option(
+        DEFAULT_REWRITE_CONTENT_DRAFTS_MARKDOWN_PATH,
+        "--output-path",
+        help="安全寄りリライト案Markdownの保存先",
+    ),
+) -> None:
+    """needs_revision の生成物に安全寄りのリライト案を作成します。"""
+    if not input_path.exists():
+        raise typer.BadParameter(f"レビューCSVが見つかりません: {input_path}")
+    reviews = load_content_reviews_csv(input_path)
+    drafts = build_content_rewrite_drafts(reviews)
+    if drafts:
+        revision_reviews = [review for review in reviews if review.status == "needs_revision"]
+        render_content_reviews(revision_reviews)
+    else:
+        console.print("[green]リライト対象の生成物はありません。[/green]")
+
+    saved_path = write_content_rewrite_drafts_markdown(drafts, output_path)
+    console.print(f"[green]安全寄りリライト案を保存しました: {saved_path}[/green]")
+    console.print("[yellow]この出力は自動公開されません。公開前に公式条件を確認してください。[/yellow]")
 
 
 def read_check_target(text: str | None, file_path: Path | None) -> str:

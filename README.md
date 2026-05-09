@@ -331,6 +331,20 @@ CSVで保存:
 uv run python -m affiliate_os suggest-content-revisions --format csv --output-path outputs/generated/revision_suggestions.csv
 ```
 
+needs_revision の生成物に、安全寄りのリライト案をMarkdownで作成:
+
+```bash
+uv run python -m affiliate_os rewrite-content-drafts --input-path outputs/generated/content_reviews.csv
+```
+
+保存先を指定:
+
+```bash
+uv run python -m affiliate_os rewrite-content-drafts --output-path outputs/generated/rewrite_content_drafts.md
+```
+
+リライト案は自動公開されません。公開前に公式条件、成果条件、否認条件、費用、返金条件、追加費用の有無を確認してください。
+
 検出対象の例:
 
 - 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」

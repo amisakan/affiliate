@@ -7,10 +7,12 @@ from affiliate_os.models import Offer
 from affiliate_os.reviews import (
     approved_content_reviews,
     build_content_reviews,
+    build_content_rewrite_drafts,
     build_revision_suggestions,
     content_preview,
     format_approved_content_markdown,
     format_content_reviews_markdown,
+    format_content_rewrite_drafts_markdown,
     format_revision_suggestions_markdown,
     load_content_reviews_csv,
     needs_revision_reviews,
@@ -21,6 +23,7 @@ from affiliate_os.reviews import (
     write_approved_content_markdown,
     write_content_reviews_csv,
     write_content_reviews_markdown,
+    write_content_rewrite_drafts_markdown,
     write_revision_suggestions_csv,
     write_revision_suggestions_markdown,
 )
@@ -331,6 +334,63 @@ def test_write_revision_suggestions_markdown(tmp_path):
     assert "# Revision Suggestions" in text
     assert "note_article:OFF-0001" in text
     assert "note記事では見出し単位" in text
+
+
+def test_build_content_rewrite_drafts_creates_safe_x_post_draft():
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    reviews = build_content_reviews(
+        [x_post],
+        [],
+        status="needs_revision",
+        reviewer_comment="費用と否認条件を残す",
+    )
+
+    drafts = build_content_rewrite_drafts(reviews)
+
+    assert len(drafts) == 1
+    assert drafts[0].review_id == "x_post:OFF-0001"
+    assert "公式条件、成果条件、否認条件、費用" in drafts[0].markdown
+    assert "費用と否認条件を残す" in drafts[0].markdown
+    assert "自動公開しない" in drafts[0].safety_notes
+    assert len(drafts[0].markdown) <= 280
+
+
+def test_build_content_rewrite_drafts_creates_note_article_checklist():
+    offer = make_offer()
+    note_article = generate_note_article_for_offer(offer)
+    reviews = build_content_reviews(
+        [],
+        [note_article],
+        status="needs_revision",
+        reviewer_comment="成果条件を明記する",
+    )
+
+    drafts = build_content_rewrite_drafts(reviews)
+
+    assert len(drafts) == 1
+    assert drafts[0].content_type == "note_article"
+    assert "## 申し込み前に確認したいこと" in drafts[0].markdown
+    assert "- 成果条件" in drafts[0].markdown
+    assert "- 否認条件" in drafts[0].markdown
+    assert "成果や効果を約束するものではありません" in drafts[0].markdown
+
+
+def test_write_content_rewrite_drafts_markdown(tmp_path):
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    reviews = build_content_reviews([x_post], [], status="needs_revision")
+    drafts = build_content_rewrite_drafts(reviews)
+    output_path = tmp_path / "rewrite_content_drafts.md"
+
+    saved_path = write_content_rewrite_drafts_markdown(drafts, output_path)
+    text = output_path.read_text(encoding="utf-8")
+
+    assert saved_path == output_path
+    assert format_content_rewrite_drafts_markdown(drafts) == text
+    assert "# Rewrite Content Drafts" in text
+    assert "自動公開はしません" in text
+    assert "x_post:OFF-0001" in text
 
 
 def test_write_content_reviews_markdown(tmp_path):
