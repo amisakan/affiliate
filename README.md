@@ -307,6 +307,18 @@ uv run python -m affiliate_os update-content-review x_post:OFF-0001 --status app
 uv run python -m affiliate_os update-content-review note_article:OFF-0001 --status on_hold --input-path outputs/generated/content_reviews.csv --output-path outputs/generated/content_reviews_updated.csv
 ```
 
+approved の生成物だけを公開候補リストとして出力:
+
+```bash
+uv run python -m affiliate_os list-approved-content --input-path outputs/generated/content_reviews.csv
+```
+
+CSVで保存:
+
+```bash
+uv run python -m affiliate_os list-approved-content --format csv --output-path outputs/generated/approved_content.csv
+```
+
 検出対象の例:
 
 - 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」

@@ -26,12 +26,18 @@ from affiliate_os.importers.reviewer import (
 from affiliate_os.importers.vision_importer import extract_offer_from_image
 from affiliate_os.models import Offer
 from affiliate_os.reviews import (
+    DEFAULT_APPROVED_CONTENT_MARKDOWN_PATH,
+    DEFAULT_APPROVED_CONTENT_OUTPUT_PATH,
     DEFAULT_CONTENT_REVIEWS_MARKDOWN_PATH,
     DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH,
     REVIEW_STATUSES,
+    approved_content_reviews,
     build_content_reviews,
+    load_content_reviews_csv,
     normalize_review_status,
     update_content_review_csv,
+    write_approved_content_csv,
+    write_approved_content_markdown,
     write_content_reviews_csv,
     write_content_reviews_markdown,
 )
@@ -411,6 +417,37 @@ def update_content_review_command(
     assert result.updated_review is not None
     render_content_reviews([result.updated_review])
     console.print(f"[green]レビューを更新しました: {output_path or input_path}[/green]")
+
+
+@app.command("list-approved-content")
+def list_approved_content_command(
+    input_path: Path = typer.Option(
+        DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH,
+        "--input-path",
+        help="読み込むレビューCSV",
+    ),
+    output_format: str = typer.Option("markdown", "--format", help="出力形式: csv, markdown"),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output-path",
+        help="公開候補リストの保存先。未指定時は既定パスに保存",
+    ),
+) -> None:
+    """approved の生成物だけを公開候補リストとして出力します。"""
+    if not input_path.exists():
+        raise typer.BadParameter(f"レビューCSVが見つかりません: {input_path}")
+    output_format = parse_review_output_format(output_format)
+    reviews = load_content_reviews_csv(input_path)
+    approved_reviews = approved_content_reviews(reviews)
+    render_content_reviews(approved_reviews)
+
+    if output_format == "markdown":
+        target_path = output_path or DEFAULT_APPROVED_CONTENT_MARKDOWN_PATH
+        saved_path = write_approved_content_markdown(reviews, target_path)
+    else:
+        target_path = output_path or DEFAULT_APPROVED_CONTENT_OUTPUT_PATH
+        saved_path = write_approved_content_csv(reviews, target_path)
+    console.print(f"[green]公開候補リストを保存しました: {saved_path}[/green]")
 
 
 def read_check_target(text: str | None, file_path: Path | None) -> str:
