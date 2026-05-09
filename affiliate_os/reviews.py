@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
+from affiliate_os.compliance import ComplianceReport, check_compliance
 from affiliate_os.content import NoteArticleDraft, XPostDraft
 
 DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH = Path("outputs") / "generated" / "content_reviews.csv"
@@ -23,6 +24,9 @@ DEFAULT_REVISION_SUGGESTIONS_MARKDOWN_PATH = (
 )
 DEFAULT_REWRITE_CONTENT_DRAFTS_MARKDOWN_PATH = (
     Path("outputs") / "generated" / "rewrite_content_drafts.md"
+)
+DEFAULT_REWRITE_CONTENT_CHECKS_MARKDOWN_PATH = (
+    Path("outputs") / "generated" / "rewrite_content_checks.md"
 )
 REVIEW_STATUSES = ("draft", "approved", "needs_revision", "rejected", "on_hold")
 DEFAULT_REVIEW_STATUS = "draft"
@@ -151,6 +155,17 @@ class ContentRewriteDraft:
     markdown: str
     safety_notes: str
     source_preview: str
+
+
+@dataclass(frozen=True)
+class RewriteDraftComplianceCheck:
+    review_id: str
+    markdown: str
+    compliance_report: ComplianceReport
+
+    @property
+    def passed(self) -> bool:
+        return self.compliance_report.passed
 
 
 def build_content_reviews(
@@ -605,6 +620,100 @@ def format_content_rewrite_drafts_markdown(drafts: list[ContentRewriteDraft]) ->
         )
         if draft.source_preview:
             lines.extend(["元プレビュー:", "", f"> {draft.source_preview}", ""])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def check_content_rewrite_drafts_markdown(markdown: str) -> list[RewriteDraftComplianceCheck]:
+    return [
+        RewriteDraftComplianceCheck(
+            review_id=review_id,
+            markdown=draft_markdown,
+            compliance_report=check_compliance(draft_markdown),
+        )
+        for review_id, draft_markdown in extract_rewrite_draft_markdown_blocks(markdown)
+    ]
+
+
+def check_content_rewrite_drafts_file(path: Path) -> list[RewriteDraftComplianceCheck]:
+    return check_content_rewrite_drafts_markdown(path.read_text(encoding="utf-8"))
+
+
+def extract_rewrite_draft_markdown_blocks(markdown: str) -> list[tuple[str, str]]:
+    blocks: list[tuple[str, str]] = []
+    current_review_id = ""
+    collecting = False
+    collected_lines: list[str] = []
+
+    for line in markdown.splitlines():
+        if line.startswith("### "):
+            current_review_id = line.removeprefix("### ").strip()
+            continue
+        if line.strip() == "```markdown" and current_review_id:
+            collecting = True
+            collected_lines = []
+            continue
+        if collecting and line.strip() == "```":
+            draft_markdown = "\n".join(collected_lines).strip()
+            if draft_markdown:
+                blocks.append((current_review_id, draft_markdown))
+            collecting = False
+            collected_lines = []
+            continue
+        if collecting:
+            collected_lines.append(line)
+
+    return blocks
+
+
+def write_rewrite_draft_checks_markdown(
+    checks: list[RewriteDraftComplianceCheck],
+    output_path: Path = DEFAULT_REWRITE_CONTENT_CHECKS_MARKDOWN_PATH,
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(format_rewrite_draft_checks_markdown(checks), encoding="utf-8")
+    return output_path
+
+
+def format_rewrite_draft_checks_markdown(checks: list[RewriteDraftComplianceCheck]) -> str:
+    lines = [
+        "# Rewrite Draft Compliance Checks",
+        "",
+        "リライト案の本文だけを抽出してチェックした結果です。自動公開はしません。",
+        "",
+        "| Review ID | Status | High Risk | Issues |",
+        "| --- | --- | ---: | ---: |",
+    ]
+    if not checks:
+        lines.append("| - | no rewrite drafts | 0 | 0 |")
+        return "\n".join(lines) + "\n"
+
+    for check in checks:
+        status = "passed" if check.passed else "needs_review"
+        lines.append(
+            "| "
+            f"{check.review_id} | "
+            f"{status} | "
+            f"{check.compliance_report.high_risk_count} | "
+            f"{len(check.compliance_report.issues)} |"
+        )
+
+    risky_checks = [check for check in checks if not check.passed]
+    if risky_checks:
+        lines.extend(["", "## Issues", ""])
+        for check in risky_checks:
+            lines.extend([f"### {check.review_id}", ""])
+            for issue in check.compliance_report.issues:
+                lines.extend(
+                    [
+                        f"- 重大度: {issue.severity.value}",
+                        f"- カテゴリ: {issue.category}",
+                        f"- 検出表現: {issue.matched_text}",
+                        f"- 修正提案: {issue.suggestion}",
+                        "",
+                    ]
+                )
+    else:
+        lines.extend(["", "## Notes", "", "- 明確なリスク表現は見つかりませんでした。"])
     return "\n".join(lines).rstrip() + "\n"
 
 

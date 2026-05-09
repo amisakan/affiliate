@@ -32,12 +32,14 @@ from affiliate_os.reviews import (
     DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH,
     DEFAULT_REVISION_SUGGESTIONS_MARKDOWN_PATH,
     DEFAULT_REVISION_SUGGESTIONS_OUTPUT_PATH,
+    DEFAULT_REWRITE_CONTENT_CHECKS_MARKDOWN_PATH,
     DEFAULT_REWRITE_CONTENT_DRAFTS_MARKDOWN_PATH,
     REVIEW_STATUSES,
     approved_content_reviews,
     build_content_reviews,
     build_content_rewrite_drafts,
     build_revision_suggestions,
+    check_content_rewrite_drafts_file,
     load_content_reviews_csv,
     normalize_review_status,
     update_content_review_csv,
@@ -48,6 +50,7 @@ from affiliate_os.reviews import (
     write_content_rewrite_drafts_markdown,
     write_revision_suggestions_csv,
     write_revision_suggestions_markdown,
+    write_rewrite_draft_checks_markdown,
 )
 from affiliate_os.scoring import (
     DEFAULT_SCORES_PATH,
@@ -520,6 +523,39 @@ def rewrite_content_drafts_command(
     saved_path = write_content_rewrite_drafts_markdown(drafts, output_path)
     console.print(f"[green]安全寄りリライト案を保存しました: {saved_path}[/green]")
     console.print("[yellow]この出力は自動公開されません。公開前に公式条件を確認してください。[/yellow]")
+
+
+@app.command("check-rewrite-drafts")
+def check_rewrite_drafts_command(
+    input_path: Path = typer.Option(
+        DEFAULT_REWRITE_CONTENT_DRAFTS_MARKDOWN_PATH,
+        "--input-path",
+        help="読み込むリライト案Markdown",
+    ),
+    output_path: Path = typer.Option(
+        DEFAULT_REWRITE_CONTENT_CHECKS_MARKDOWN_PATH,
+        "--output-path",
+        help="リライト案チェック結果Markdownの保存先",
+    ),
+) -> None:
+    """安全寄りリライト案の本文だけを再度コンプライアンスチェックします。"""
+    if not input_path.exists():
+        raise typer.BadParameter(f"リライト案Markdownが見つかりません: {input_path}")
+    checks = check_content_rewrite_drafts_file(input_path)
+    if not checks:
+        console.print("[yellow]チェック対象のリライト案が見つかりませんでした。[/yellow]")
+    elif all(check.passed for check in checks):
+        console.print("[green]全リライト案で明確なリスク表現は見つかりませんでした。[/green]")
+    else:
+        risky_count = sum(1 for check in checks if not check.passed)
+        high_risk_count = sum(check.compliance_report.high_risk_count for check in checks)
+        console.print(
+            f"[yellow]確認が必要なリライト案: {risky_count}件 / high: {high_risk_count}件[/yellow]"
+        )
+
+    saved_path = write_rewrite_draft_checks_markdown(checks, output_path)
+    console.print(f"[green]リライト案チェック結果を保存しました: {saved_path}[/green]")
+    console.print("[yellow]この結果は公開判定ではありません。公開前に公式条件を確認してください。[/yellow]")
 
 
 def read_check_target(text: str | None, file_path: Path | None) -> str:
