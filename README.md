@@ -319,6 +319,18 @@ CSVで保存:
 uv run python -m affiliate_os list-approved-content --format csv --output-path outputs/generated/approved_content.csv
 ```
 
+needs_revision の生成物に修正提案を付ける:
+
+```bash
+uv run python -m affiliate_os suggest-content-revisions --input-path outputs/generated/content_reviews.csv
+```
+
+CSVで保存:
+
+```bash
+uv run python -m affiliate_os suggest-content-revisions --format csv --output-path outputs/generated/revision_suggestions.csv
+```
+
 検出対象の例:
 
 - 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」

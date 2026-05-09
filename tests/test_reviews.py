@@ -7,10 +7,13 @@ from affiliate_os.models import Offer
 from affiliate_os.reviews import (
     approved_content_reviews,
     build_content_reviews,
+    build_revision_suggestions,
     content_preview,
     format_approved_content_markdown,
     format_content_reviews_markdown,
+    format_revision_suggestions_markdown,
     load_content_reviews_csv,
+    needs_revision_reviews,
     normalize_review_status,
     update_content_review,
     update_content_review_csv,
@@ -18,6 +21,8 @@ from affiliate_os.reviews import (
     write_approved_content_markdown,
     write_content_reviews_csv,
     write_content_reviews_markdown,
+    write_revision_suggestions_csv,
+    write_revision_suggestions_markdown,
 )
 from affiliate_os.scoring import explain_score
 
@@ -256,6 +261,76 @@ def test_write_approved_content_markdown(tmp_path):
     assert "# Approved Content" in text
     assert "note_article:OFF-0001" in text
     assert "公開前にLP条件を確認する" in text
+
+
+def test_needs_revision_reviews_filters_revision_targets():
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    note_article = generate_note_article_for_offer(offer)
+    reviews = build_content_reviews([x_post], [note_article])
+    updated = update_content_review(
+        reviews,
+        review_id="note_article:OFF-0001",
+        status="needs_revision",
+        reviewer_comment="注意点を本文に追加する",
+    )
+
+    targets = needs_revision_reviews(updated.reviews)
+
+    assert [review.review_id for review in targets] == ["note_article:OFF-0001"]
+    assert targets[0].reviewer_comment == "注意点を本文に追加する"
+
+
+def test_build_revision_suggestions_uses_review_context():
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    reviews = build_content_reviews([x_post], [])
+    updated = update_content_review(
+        reviews,
+        review_id="x_post:OFF-0001",
+        status="needs_revision",
+        reviewer_comment="成果条件を明記する",
+    )
+
+    suggestions = build_revision_suggestions(updated.reviews)
+
+    assert len(suggestions) == 1
+    assert suggestions[0].review_id == "x_post:OFF-0001"
+    assert "レビューコメント: 成果条件を明記する" in suggestions[0].revision_reason
+    assert "成果や効果を断定せず" in suggestions[0].suggestion
+    assert "X投稿" in suggestions[0].suggestion
+
+
+def test_write_revision_suggestions_csv(tmp_path):
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    reviews = build_content_reviews([x_post], [], status="needs_revision")
+    suggestions = build_revision_suggestions(reviews)
+    output_path = tmp_path / "revision_suggestions.csv"
+
+    saved_path = write_revision_suggestions_csv(suggestions, output_path)
+    text = output_path.read_text(encoding="utf-8")
+
+    assert saved_path == output_path
+    assert "review_id,content_type,offer_id" in text
+    assert "x_post:OFF-0001" in text
+
+
+def test_write_revision_suggestions_markdown(tmp_path):
+    offer = make_offer()
+    note_article = generate_note_article_for_offer(offer)
+    reviews = build_content_reviews([], [note_article], status="needs_revision")
+    suggestions = build_revision_suggestions(reviews)
+    output_path = tmp_path / "revision_suggestions.md"
+
+    saved_path = write_revision_suggestions_markdown(suggestions, output_path)
+    text = output_path.read_text(encoding="utf-8")
+
+    assert saved_path == output_path
+    assert format_revision_suggestions_markdown(suggestions) == text
+    assert "# Revision Suggestions" in text
+    assert "note_article:OFF-0001" in text
+    assert "note記事では見出し単位" in text
 
 
 def test_write_content_reviews_markdown(tmp_path):

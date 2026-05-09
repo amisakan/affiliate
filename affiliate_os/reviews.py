@@ -15,6 +15,12 @@ DEFAULT_APPROVED_CONTENT_OUTPUT_PATH = (
 DEFAULT_APPROVED_CONTENT_MARKDOWN_PATH = (
     Path("outputs") / "generated" / "approved_content.md"
 )
+DEFAULT_REVISION_SUGGESTIONS_OUTPUT_PATH = (
+    Path("outputs") / "generated" / "revision_suggestions.csv"
+)
+DEFAULT_REVISION_SUGGESTIONS_MARKDOWN_PATH = (
+    Path("outputs") / "generated" / "revision_suggestions.md"
+)
 REVIEW_STATUSES = ("draft", "approved", "needs_revision", "rejected", "on_hold")
 DEFAULT_REVIEW_STATUS = "draft"
 REVIEW_COLUMNS = [
@@ -33,6 +39,20 @@ REVIEW_COLUMNS = [
     "template",
     "content_preview",
     "reviewed_at",
+]
+REVISION_SUGGESTION_COLUMNS = [
+    "review_id",
+    "content_type",
+    "offer_id",
+    "offer_name",
+    "title",
+    "revision_reason",
+    "suggestion",
+    "reviewer_comment",
+    "compliance_status",
+    "score",
+    "recommendation",
+    "content_preview",
 ]
 
 
@@ -82,6 +102,38 @@ class ContentReviewUpdateResult:
     @property
     def updated(self) -> bool:
         return self.updated_review is not None
+
+
+@dataclass(frozen=True)
+class RevisionSuggestion:
+    review_id: str
+    content_type: str
+    offer_id: str
+    offer_name: str
+    title: str
+    revision_reason: str
+    suggestion: str
+    reviewer_comment: str
+    compliance_status: str
+    score: int | None
+    recommendation: str
+    content_preview: str
+
+    def to_csv_row(self) -> dict[str, str]:
+        return {
+            "review_id": self.review_id,
+            "content_type": self.content_type,
+            "offer_id": self.offer_id,
+            "offer_name": self.offer_name,
+            "title": self.title,
+            "revision_reason": self.revision_reason,
+            "suggestion": self.suggestion,
+            "reviewer_comment": self.reviewer_comment,
+            "compliance_status": self.compliance_status,
+            "score": "" if self.score is None else str(self.score),
+            "recommendation": self.recommendation,
+            "content_preview": self.content_preview,
+        }
 
 
 def build_content_reviews(
@@ -315,6 +367,134 @@ def format_approved_content_markdown(reviews: list[ContentReview]) -> str:
                 f"- コンプライアンス: {review.compliance_status}",
                 f"- コメント: {comment}",
                 f"- プレビュー: {review.content_preview}",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def needs_revision_reviews(reviews: list[ContentReview]) -> list[ContentReview]:
+    revision_targets = [review for review in reviews if review.status == "needs_revision"]
+    return sorted(
+        revision_targets,
+        key=lambda review: (
+            review.high_risk_count,
+            review.issue_count,
+            review.reviewed_at,
+        ),
+        reverse=True,
+    )
+
+
+def build_revision_suggestions(reviews: list[ContentReview]) -> list[RevisionSuggestion]:
+    return [
+        build_revision_suggestion(review)
+        for review in needs_revision_reviews(reviews)
+    ]
+
+
+def build_revision_suggestion(review: ContentReview) -> RevisionSuggestion:
+    return RevisionSuggestion(
+        review_id=review.review_id,
+        content_type=review.content_type,
+        offer_id=review.offer_id,
+        offer_name=review.offer_name,
+        title=review.title,
+        revision_reason=revision_reason_for(review),
+        suggestion=revision_suggestion_for(review),
+        reviewer_comment=review.reviewer_comment,
+        compliance_status=review.compliance_status,
+        score=review.score,
+        recommendation=review.recommendation,
+        content_preview=review.content_preview,
+    )
+
+
+def revision_reason_for(review: ContentReview) -> str:
+    reasons = []
+    if review.high_risk_count > 0:
+        reasons.append(f"highリスク表現が{review.high_risk_count}件あります")
+    if review.issue_count > 0:
+        reasons.append(f"コンプライアンス確認項目が{review.issue_count}件あります")
+    if review.reviewer_comment:
+        reasons.append(f"レビューコメント: {review.reviewer_comment}")
+    if review.score is not None and review.score < 70:
+        reasons.append(f"スコアが{review.score}/100のため、訴求軸と条件確認を見直します")
+    if not reasons:
+        reasons.append("レビュー状態がneeds_revisionです")
+    return " / ".join(reasons)
+
+
+def revision_suggestion_for(review: ContentReview) -> str:
+    suggestions = [
+        "成果や効果を断定せず、比較材料として読める表現に整える",
+        "公式条件、成果条件、否認条件、費用を確認する文を残す",
+    ]
+    if review.high_risk_count > 0 or review.issue_count > 0:
+        suggestions.append("強い断定、収益保証、不安訴求に見える表現を弱める")
+    if review.reviewer_comment:
+        suggestions.append("レビューコメントの確認事項を本文またはチェックリストに反映する")
+    if review.content_type == "x_post":
+        suggestions.append("X投稿では短くしすぎず、最終確認を促す一文を残す")
+    if review.content_type == "note_article":
+        suggestions.append("note記事では見出し単位で確認事項と注意点を分ける")
+    return " / ".join(suggestions)
+
+
+def write_revision_suggestions_csv(
+    suggestions: list[RevisionSuggestion],
+    output_path: Path = DEFAULT_REVISION_SUGGESTIONS_OUTPUT_PATH,
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=REVISION_SUGGESTION_COLUMNS)
+        writer.writeheader()
+        for suggestion in suggestions:
+            writer.writerow(suggestion.to_csv_row())
+    return output_path
+
+
+def write_revision_suggestions_markdown(
+    suggestions: list[RevisionSuggestion],
+    output_path: Path = DEFAULT_REVISION_SUGGESTIONS_MARKDOWN_PATH,
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(format_revision_suggestions_markdown(suggestions), encoding="utf-8")
+    return output_path
+
+
+def format_revision_suggestions_markdown(suggestions: list[RevisionSuggestion]) -> str:
+    lines = [
+        "# Revision Suggestions",
+        "",
+        "| Review ID | Type | Offer | Compliance | Score | Reason |",
+        "| --- | --- | --- | --- | ---: | --- |",
+    ]
+    if not suggestions:
+        lines.append("| - | - | no revision targets | - | - | - |")
+        return "\n".join(lines) + "\n"
+
+    for suggestion in suggestions:
+        score = "-" if suggestion.score is None else str(suggestion.score)
+        lines.append(
+            "| "
+            f"{suggestion.review_id} | "
+            f"{suggestion.content_type} | "
+            f"{suggestion.offer_id} | "
+            f"{suggestion.compliance_status} | "
+            f"{score} | "
+            f"{suggestion.revision_reason} |"
+        )
+    lines.extend(["", "## Suggestions", ""])
+    for suggestion in suggestions:
+        lines.extend(
+            [
+                f"### {suggestion.review_id}",
+                "",
+                f"- 案件名: {suggestion.offer_name}",
+                f"- タイトル: {suggestion.title}",
+                f"- 修正提案: {suggestion.suggestion}",
+                f"- プレビュー: {suggestion.content_preview}",
                 "",
             ]
         )
