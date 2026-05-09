@@ -203,6 +203,18 @@ Quiet Workflowの投稿では、煽りや収益訴求を避け、AI、Workflow�
 uv run python -m affiliate_os generate-posts --theme 001 --count 3 --output-dir outputs/posts
 ```
 
+テーマ一覧を確認:
+
+```bash
+uv run python -m affiliate_os list-themes
+```
+
+生成済み投稿案を確認:
+
+```bash
+uv run python -m affiliate_os list-posts --theme 001 --limit 5 --output-path outputs/posts/post_index.md
+```
+
 投稿後の指標を記録:
 
 ```bash

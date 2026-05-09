@@ -34,9 +34,13 @@ from affiliate_os.quiet_workflow import (
     append_posts,
     build_post_metric,
     ensure_quiet_workflow_csvs,
+    filter_posts,
+    filter_themes,
     find_post,
     find_theme,
     format_metrics_summary_markdown,
+    format_posts_index_markdown,
+    format_themes_index_markdown,
     generate_quiet_workflow_posts,
     load_metrics,
     load_posts,
@@ -45,6 +49,7 @@ from affiliate_os.quiet_workflow import (
     validate_quiet_workflow_posts,
     write_metrics_summary_markdown,
     write_posts_markdown,
+    write_text_markdown,
 )
 from affiliate_os.reviews import (
     DEFAULT_APPROVED_CONTENT_MARKDOWN_PATH,
@@ -404,6 +409,53 @@ def generate_posts_command(
     console.print(f"[green]Quiet Workflow投稿案を保存しました: {markdown_path}[/green]")
     console.print(f"[green]posts.csv に追記しました: {posts_path}[/green]")
     console.print("[yellow]自動投稿はしません。公開前に文脈、事実関係、画像意図を確認してください。[/yellow]")
+
+
+@app.command("list-themes")
+def list_themes_command(
+    keyword: str | None = typer.Option(None, "--keyword", help="テーマ検索キーワード"),
+    themes_path: Path = typer.Option(
+        DEFAULT_THEMES_PATH,
+        "--themes-path",
+        help="themes.csv の読み込み先",
+    ),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output-path",
+        help="Markdown保存先。未指定時は画面表示のみ",
+    ),
+) -> None:
+    """Quiet Workflowテーマ一覧を表示します。"""
+    themes = filter_themes(load_themes(themes_path), keyword=keyword)
+    markdown = format_themes_index_markdown(themes)
+    console.print(markdown)
+    if output_path:
+        saved_path = write_text_markdown(markdown, output_path)
+        console.print(f"[green]テーマ一覧を保存しました: {saved_path}[/green]")
+
+
+@app.command("list-posts")
+def list_posts_command(
+    theme_id: str | None = typer.Option(None, "--theme", help="テーマIDで絞り込み"),
+    limit: int | None = typer.Option(None, "--limit", min=1, help="表示件数の上限"),
+    posts_path: Path = typer.Option(
+        DEFAULT_POSTS_PATH,
+        "--posts-path",
+        help="posts.csv の読み込み先",
+    ),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output-path",
+        help="Markdown保存先。未指定時は画面表示のみ",
+    ),
+) -> None:
+    """Quiet Workflow投稿案をCSVから一覧表示します。"""
+    posts = filter_posts(load_posts(posts_path), theme_id=theme_id, limit=limit)
+    markdown = format_posts_index_markdown(posts)
+    console.print(markdown)
+    if output_path:
+        saved_path = write_text_markdown(markdown, output_path)
+        console.print(f"[green]投稿案一覧を保存しました: {saved_path}[/green]")
 
 
 @app.command("record-post-metrics")
