@@ -21,6 +21,9 @@ DEFAULT_REVISION_SUGGESTIONS_OUTPUT_PATH = (
 DEFAULT_REVISION_SUGGESTIONS_MARKDOWN_PATH = (
     Path("outputs") / "generated" / "revision_suggestions.md"
 )
+DEFAULT_REWRITE_CONTENT_DRAFTS_MARKDOWN_PATH = (
+    Path("outputs") / "generated" / "rewrite_content_drafts.md"
+)
 REVIEW_STATUSES = ("draft", "approved", "needs_revision", "rejected", "on_hold")
 DEFAULT_REVIEW_STATUS = "draft"
 REVIEW_COLUMNS = [
@@ -134,6 +137,20 @@ class RevisionSuggestion:
             "recommendation": self.recommendation,
             "content_preview": self.content_preview,
         }
+
+
+@dataclass(frozen=True)
+class ContentRewriteDraft:
+    review_id: str
+    content_type: str
+    offer_id: str
+    offer_name: str
+    title: str
+    revision_reason: str
+    suggestion: str
+    markdown: str
+    safety_notes: str
+    source_preview: str
 
 
 def build_content_reviews(
@@ -439,6 +456,156 @@ def revision_suggestion_for(review: ContentReview) -> str:
     if review.content_type == "note_article":
         suggestions.append("note記事では見出し単位で確認事項と注意点を分ける")
     return " / ".join(suggestions)
+
+
+def build_content_rewrite_drafts(reviews: list[ContentReview]) -> list[ContentRewriteDraft]:
+    return [
+        build_content_rewrite_draft(suggestion)
+        for suggestion in build_revision_suggestions(reviews)
+    ]
+
+
+def build_content_rewrite_draft(suggestion: RevisionSuggestion) -> ContentRewriteDraft:
+    markdown = (
+        build_x_post_rewrite_markdown(suggestion)
+        if suggestion.content_type == "x_post"
+        else build_note_article_rewrite_markdown(suggestion)
+    )
+    return ContentRewriteDraft(
+        review_id=suggestion.review_id,
+        content_type=suggestion.content_type,
+        offer_id=suggestion.offer_id,
+        offer_name=suggestion.offer_name,
+        title=suggestion.title,
+        revision_reason=suggestion.revision_reason,
+        suggestion=suggestion.suggestion,
+        markdown=markdown,
+        safety_notes=rewrite_safety_notes(suggestion),
+        source_preview=suggestion.content_preview,
+    )
+
+
+def build_x_post_rewrite_markdown(suggestion: RevisionSuggestion) -> str:
+    comment = suggestion.reviewer_comment or "公式条件を確認する"
+    text = (
+        f"{suggestion.offer_name}は、条件を確認しながら比較したい人向けの検討候補です。\n"
+        "公式条件、成果条件、否認条件、費用を確認し、目的や予算に合うか整理してから判断してください。\n"
+        f"確認メモ: {comment}"
+    )
+    return fit_rewrite_x_post_length(text)
+
+
+def build_note_article_rewrite_markdown(suggestion: RevisionSuggestion) -> str:
+    comment = suggestion.reviewer_comment or "公式条件を確認する"
+    lines = [
+        f"# {suggestion.offer_name}を検討するときのリライト案",
+        "",
+        "## 目的",
+        "",
+        (
+            f"この記事は、{suggestion.offer_name}を検討する前に、条件や注意点を整理する"
+            "ための下書きです。成果や効果を約束するものではありません。"
+        ),
+        "",
+        "## 比較するときの見方",
+        "",
+        "- 自分の目的、予算、利用条件に合うかを確認する",
+        "- 公式ページの最新情報と、申込前に必要な条件を確認する",
+        "- 他の選択肢と比べて、向いている点と注意点を分けて読む",
+        "",
+        "## 申し込み前に確認したいこと",
+        "",
+        "- 公式条件",
+        "- 成果条件",
+        "- 否認条件",
+        "- 費用、返金条件、追加費用の有無",
+        "",
+        "## レビュー反映メモ",
+        "",
+        f"- 修正理由: {suggestion.revision_reason}",
+        f"- 修正方針: {suggestion.suggestion}",
+        f"- レビューコメント: {comment}",
+        "",
+        "## 注意点",
+        "",
+        "- 収益、効果、安全性を断定しない",
+        "- 読者の焦りや不安を過度に刺激しない",
+        "- 医療、転職、金融領域では個人差や専門家への確認余地を残す",
+    ]
+    return "\n".join(lines).strip() + "\n"
+
+
+def rewrite_safety_notes(suggestion: RevisionSuggestion) -> str:
+    notes = [
+        "自動公開しない",
+        "誇大表現、収益保証、断定表現、不安訴求を避ける",
+        "公式条件、成果条件、否認条件、費用確認を残す",
+    ]
+    if suggestion.content_type == "note_article":
+        notes.append("公開前に見出し単位で条件と注意点を再確認する")
+    if suggestion.content_type == "x_post":
+        notes.append("短文でも最終確認を促す一文を残す")
+    return " / ".join(notes)
+
+
+def fit_rewrite_x_post_length(text: str, max_length: int = 280) -> str:
+    if len(text) <= max_length:
+        return text
+    suffix = "\n詳細条件は公式情報で確認してください。"
+    max_body_length = max_length - len(suffix)
+    return text[:max_body_length].rstrip("、。\n ") + suffix
+
+
+def write_content_rewrite_drafts_markdown(
+    drafts: list[ContentRewriteDraft],
+    output_path: Path = DEFAULT_REWRITE_CONTENT_DRAFTS_MARKDOWN_PATH,
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(format_content_rewrite_drafts_markdown(drafts), encoding="utf-8")
+    return output_path
+
+
+def format_content_rewrite_drafts_markdown(drafts: list[ContentRewriteDraft]) -> str:
+    lines = [
+        "# Rewrite Content Drafts",
+        "",
+        "このファイルは needs_revision の生成物に対する安全寄りのリライト案です。自動公開はしません。",
+        "",
+        "| Review ID | Type | Offer | Reason |",
+        "| --- | --- | --- | --- |",
+    ]
+    if not drafts:
+        lines.append("| - | - | no rewrite targets | - |")
+        return "\n".join(lines) + "\n"
+
+    for draft in drafts:
+        lines.append(
+            "| "
+            f"{draft.review_id} | "
+            f"{draft.content_type} | "
+            f"{draft.offer_id} | "
+            f"{draft.revision_reason} |"
+        )
+    lines.extend(["", "## Drafts", ""])
+    for draft in drafts:
+        lines.extend(
+            [
+                f"### {draft.review_id}",
+                "",
+                f"- 案件名: {draft.offer_name}",
+                f"- タイトル: {draft.title}",
+                f"- 安全メモ: {draft.safety_notes}",
+                f"- 修正提案: {draft.suggestion}",
+                "",
+                "```markdown",
+                draft.markdown.rstrip(),
+                "```",
+                "",
+            ]
+        )
+        if draft.source_preview:
+            lines.extend(["元プレビュー:", "", f"> {draft.source_preview}", ""])
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def write_revision_suggestions_csv(
