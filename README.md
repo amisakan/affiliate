@@ -203,6 +203,18 @@ Quiet Workflowの投稿では、煽りや収益訴求を避け、AI、Workflow�
 uv run python -m affiliate_os generate-posts --theme 001 --count 3 --output-dir outputs/posts
 ```
 
+投稿後の指標を記録:
+
+```bash
+uv run python -m affiliate_os record-post-metrics QW-0001 --impressions 1200 --engagements 48 --saves 16 --notes "保存率が高め"
+```
+
+投稿指標をMarkdownで振り返る:
+
+```bash
+uv run python -m affiliate_os summarize-post-metrics --output-path outputs/posts/metrics_summary.md
+```
+
 X投稿案を生成:
 
 ```bash

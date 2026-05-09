@@ -103,6 +103,50 @@ class QuietWorkflowPostDraft(BaseModel):
         return cls(**values)
 
 
+class QuietWorkflowMetric(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    post_id: str
+    theme_id: str
+    posted_at: datetime
+    impressions: int = Field(ge=0)
+    engagements: int = Field(ge=0)
+    saves: int = Field(ge=0)
+    notes: str = ""
+
+    @property
+    def engagement_rate(self) -> float:
+        if self.impressions == 0:
+            return 0.0
+        return self.engagements / self.impressions
+
+    @property
+    def save_rate(self) -> float:
+        if self.impressions == 0:
+            return 0.0
+        return self.saves / self.impressions
+
+    def to_csv_row(self) -> dict[str, str]:
+        return {
+            "post_id": self.post_id,
+            "theme_id": self.theme_id,
+            "posted_at": self.posted_at.isoformat(timespec="seconds"),
+            "impressions": str(self.impressions),
+            "engagements": str(self.engagements),
+            "saves": str(self.saves),
+            "notes": self.notes,
+        }
+
+    @classmethod
+    def from_csv_row(cls, row: dict[str, str]) -> QuietWorkflowMetric:
+        values: dict[str, Any] = dict(row)
+        values["posted_at"] = parse_datetime(row.get("posted_at", ""))
+        values["impressions"] = parse_int(row.get("impressions", "0"))
+        values["engagements"] = parse_int(row.get("engagements", "0"))
+        values["saves"] = parse_int(row.get("saves", "0"))
+        return cls(**values)
+
+
 def ensure_csv(path: Path, columns: list[str]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     if not path.exists() or path.stat().st_size == 0:
@@ -152,6 +196,30 @@ def append_posts(posts: list[QuietWorkflowPostDraft], path: Path = DEFAULT_POSTS
             writer.writerow(post.to_csv_row())
 
 
+def load_metrics(path: Path = DEFAULT_METRICS_PATH) -> list[QuietWorkflowMetric]:
+    ensure_csv(path, METRIC_COLUMNS)
+    with path.open("r", newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        return [QuietWorkflowMetric.from_csv_row(row) for row in reader]
+
+
+def append_metric(metric: QuietWorkflowMetric, path: Path = DEFAULT_METRICS_PATH) -> None:
+    ensure_csv(path, METRIC_COLUMNS)
+    with path.open("a", newline="", encoding="utf-8") as file:
+        writer = csv.DictWriter(file, fieldnames=METRIC_COLUMNS)
+        writer.writerow(metric.to_csv_row())
+
+
+def find_post(
+    posts: list[QuietWorkflowPostDraft], post_id: str
+) -> QuietWorkflowPostDraft | None:
+    normalized = post_id.strip()
+    for post in posts:
+        if post.post_id == normalized:
+            return post
+    return None
+
+
 def next_post_number(posts: list[QuietWorkflowPostDraft]) -> int:
     max_number = 0
     for post in posts:
@@ -188,6 +256,25 @@ def generate_quiet_workflow_posts(
             )
         )
     return drafts
+
+
+def build_post_metric(
+    post: QuietWorkflowPostDraft,
+    impressions: int,
+    engagements: int,
+    saves: int,
+    notes: str = "",
+    posted_at: datetime | None = None,
+) -> QuietWorkflowMetric:
+    return QuietWorkflowMetric(
+        post_id=post.post_id,
+        theme_id=post.theme_id,
+        posted_at=posted_at or datetime.now(),
+        impressions=impressions,
+        engagements=engagements,
+        saves=saves,
+        notes=notes,
+    )
 
 
 POST_TEXT_TEMPLATES = [
@@ -344,6 +431,54 @@ def format_posts_markdown(posts: list[QuietWorkflowPostDraft]) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def write_metrics_summary_markdown(
+    metrics: list[QuietWorkflowMetric],
+    output_path: Path,
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(format_metrics_summary_markdown(metrics), encoding="utf-8")
+    return output_path
+
+
+def format_metrics_summary_markdown(metrics: list[QuietWorkflowMetric]) -> str:
+    lines = [
+        "# Quiet Workflow Metrics",
+        "",
+        "| Post ID | Theme | Impressions | Engagements | Saves | Engagement Rate | Save Rate |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    if not metrics:
+        lines.append("| - | - | 0 | 0 | 0 | 0.0% | 0.0% |")
+        return "\n".join(lines) + "\n"
+
+    for metric in sorted(metrics, key=metric_sort_key, reverse=True):
+        lines.append(
+            "| "
+            f"{metric.post_id} | "
+            f"{metric.theme_id} | "
+            f"{metric.impressions} | "
+            f"{metric.engagements} | "
+            f"{metric.saves} | "
+            f"{format_rate(metric.engagement_rate)} | "
+            f"{format_rate(metric.save_rate)} |"
+        )
+
+    noted_metrics = [metric for metric in metrics if metric.notes]
+    if noted_metrics:
+        lines.extend(["", "## Notes", ""])
+        for metric in noted_metrics:
+            lines.append(f"- {metric.post_id}: {metric.notes}")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def metric_sort_key(metric: QuietWorkflowMetric) -> tuple[float, float, int]:
+    return (metric.save_rate, metric.engagement_rate, metric.impressions)
+
+
+def format_rate(value: float) -> str:
+    return f"{value * 100:.1f}%"
+
+
 def parse_datetime(value: str) -> datetime:
     if not value:
         return datetime.fromtimestamp(0)
@@ -351,3 +486,10 @@ def parse_datetime(value: str) -> datetime:
         return datetime.fromisoformat(value)
     except ValueError:
         return datetime.fromtimestamp(0)
+
+
+def parse_int(value: str) -> int:
+    try:
+        return int(value)
+    except ValueError:
+        return 0
