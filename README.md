@@ -295,6 +295,18 @@ uv run python -m affiliate_os generate-content-reviews --offer-id OFF-0001 --wit
 uv run python -m affiliate_os generate-content-reviews --status needs_revision --comment "公式条件を再確認する"
 ```
 
+レビューCSVの状態を更新:
+
+```bash
+uv run python -m affiliate_os update-content-review x_post:OFF-0001 --status approved --comment "公開候補として扱う"
+```
+
+別ファイルに保存:
+
+```bash
+uv run python -m affiliate_os update-content-review note_article:OFF-0001 --status on_hold --input-path outputs/generated/content_reviews.csv --output-path outputs/generated/content_reviews_updated.csv
+```
+
 検出対象の例:
 
 - 禁止表現: 「誰でも簡単」「必ず稼げる」「月100万円確定」

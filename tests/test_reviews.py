@@ -8,7 +8,10 @@ from affiliate_os.reviews import (
     build_content_reviews,
     content_preview,
     format_content_reviews_markdown,
+    load_content_reviews_csv,
     normalize_review_status,
+    update_content_review,
+    update_content_review_csv,
     write_content_reviews_csv,
     write_content_reviews_markdown,
 )
@@ -79,6 +82,101 @@ def test_write_content_reviews_csv(tmp_path):
     assert "review_id,content_type,offer_id" in text
     assert "x_post:OFF-0001" in text
     assert ",draft," in text
+
+
+def test_load_content_reviews_csv_round_trips_rows(tmp_path):
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    reviewed_at = datetime(2026, 5, 8, 14, 0)
+    reviews = build_content_reviews(
+        [x_post],
+        [],
+        status="approved",
+        reviewed_at=reviewed_at,
+    )
+    output_path = tmp_path / "content_reviews.csv"
+    write_content_reviews_csv(reviews, output_path)
+
+    loaded = load_content_reviews_csv(output_path)
+
+    assert loaded == reviews
+
+
+def test_update_content_review_changes_status_and_comment():
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    note_article = generate_note_article_for_offer(offer)
+    reviews = build_content_reviews([x_post], [note_article])
+
+    result = update_content_review(
+        reviews,
+        review_id="x_post:OFF-0001",
+        status="approved",
+        reviewer_comment="公開候補として扱う",
+    )
+
+    assert result.updated
+    assert result.updated_review is not None
+    assert result.updated_review.status == "approved"
+    assert result.updated_review.reviewer_comment == "公開候補として扱う"
+    assert result.reviews[1].status == "draft"
+
+
+def test_update_content_review_keeps_comment_when_not_provided():
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    reviews = build_content_reviews(
+        [x_post],
+        [],
+        status="needs_revision",
+        reviewer_comment="条件を確認する",
+    )
+
+    result = update_content_review(
+        reviews,
+        review_id="x_post:OFF-0001",
+        status="on_hold",
+    )
+
+    assert result.updated_review is not None
+    assert result.updated_review.status == "on_hold"
+    assert result.updated_review.reviewer_comment == "条件を確認する"
+
+
+def test_update_content_review_returns_not_updated_for_unknown_id():
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    reviews = build_content_reviews([x_post], [])
+
+    result = update_content_review(
+        reviews,
+        review_id="x_post:OFF-9999",
+        status="approved",
+    )
+
+    assert not result.updated
+    assert result.updated_review is None
+    assert result.reviews == reviews
+
+
+def test_update_content_review_csv_writes_updated_rows(tmp_path):
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    reviews = build_content_reviews([x_post], [])
+    output_path = tmp_path / "content_reviews.csv"
+    write_content_reviews_csv(reviews, output_path)
+
+    result = update_content_review_csv(
+        output_path,
+        review_id="x_post:OFF-0001",
+        status="rejected",
+        reviewer_comment="条件確認が必要",
+    )
+    loaded = load_content_reviews_csv(output_path)
+
+    assert result.updated
+    assert loaded[0].status == "rejected"
+    assert loaded[0].reviewer_comment == "条件確認が必要"
 
 
 def test_write_content_reviews_markdown(tmp_path):

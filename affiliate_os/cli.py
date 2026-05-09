@@ -31,6 +31,7 @@ from affiliate_os.reviews import (
     REVIEW_STATUSES,
     build_content_reviews,
     normalize_review_status,
+    update_content_review_csv,
     write_content_reviews_csv,
     write_content_reviews_markdown,
 )
@@ -371,6 +372,45 @@ def generate_content_reviews_command(
         target_path = output_path or DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH
         saved_path = write_content_reviews_csv(reviews, target_path)
     console.print(f"[green]生成物レビュー一覧を保存しました: {saved_path}[/green]")
+
+
+@app.command("update-content-review")
+def update_content_review_command(
+    review_id: str = typer.Argument(..., help="更新するレビューID。例: x_post:OFF-0001"),
+    status: str = typer.Option(..., "--status", help=f"レビュー状態: {', '.join(REVIEW_STATUSES)}"),
+    comment: str | None = typer.Option(
+        None,
+        "--comment",
+        help="レビューコメント。未指定時は既存コメントを保持",
+    ),
+    input_path: Path = typer.Option(
+        DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH,
+        "--input-path",
+        help="更新対象のレビューCSV",
+    ),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output-path",
+        help="保存先CSV。未指定時は入力CSVを上書き",
+    ),
+) -> None:
+    """生成物レビューCSVの状態とコメントを更新します。"""
+    if not input_path.exists():
+        raise typer.BadParameter(f"レビューCSVが見つかりません: {input_path}")
+    status = parse_review_status(status)
+    result = update_content_review_csv(
+        input_path=input_path,
+        review_id=review_id,
+        status=status,
+        reviewer_comment=comment,
+        output_path=output_path,
+    )
+    if not result.updated:
+        console.print(f"[yellow]レビューIDが見つかりません: {review_id}[/yellow]")
+        return
+    assert result.updated_review is not None
+    render_content_reviews([result.updated_review])
+    console.print(f"[green]レビューを更新しました: {output_path or input_path}[/green]")
 
 
 def read_check_target(text: str | None, file_path: Path | None) -> str:
