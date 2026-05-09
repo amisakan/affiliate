@@ -43,6 +43,20 @@ make format
 - 大きな変更は、先にIssueか `docs/` に計画を書く
 - PR本文に変更内容、テスト結果、倫理・コンプライアンス確認、既知のリスクを書く
 
+### GitHub ActionsでPRを作成する
+
+GitHub連携ツールでPR作成権限が不足する場合は、`Create pull request` workflowを手動実行してください。
+
+入力項目:
+
+- `head_branch`: 変更をpushしたブランチ名
+- `base_branch`: PRの向き先。通常は `main`
+- `title`: PRタイトル
+- `body`: PR本文
+- `draft`: draft PRとして作るかどうか
+
+このworkflowは `contents: read` と `pull-requests: write` だけを明示して、既存のCI権限とは分けています。
+
 ## 機密情報
 
 以下はコミットしないでください。
