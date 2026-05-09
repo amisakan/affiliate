@@ -187,6 +187,22 @@ uv run python -m affiliate_os check-offers
 uv run python -m affiliate_os check-offers --data-path data/offers.csv
 ```
 
+Quiet Workflow向けのX投稿案と画像生成プロンプトを作成:
+
+```bash
+uv run python -m affiliate_os generate-posts --theme 001 --count 10
+```
+
+`generate-posts` は `data/themes.csv` の `theme_id` をもとに、LLM APIなしのテンプレート生成で投稿案を作ります。生成内容は `outputs/posts/` にMarkdownで保存し、`data/posts.csv` に追記します。`data/metrics.csv` は投稿後の振り返り用CSVとして用意します。
+
+Quiet Workflowの投稿では、煽りや収益訴求を避け、AI、Workflow、Research、Deep Work、情報整理を主軸にします。画像生成用プロンプトは黒背景、深緑、余白、ミニマルな構図を基本にします。
+
+保存先を指定:
+
+```bash
+uv run python -m affiliate_os generate-posts --theme 001 --count 3 --output-dir outputs/posts
+```
+
 X投稿案を生成:
 
 ```bash
