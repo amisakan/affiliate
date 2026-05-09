@@ -5,16 +5,21 @@ from affiliate_os.quiet_workflow import (
     POST_COLUMNS,
     THEME_COLUMNS,
     QuietWorkflowTheme,
+    append_metric,
     append_posts,
+    build_post_metric,
     ensure_quiet_workflow_csvs,
     find_theme,
+    format_metrics_summary_markdown,
     format_posts_markdown,
     generate_quiet_workflow_posts,
+    load_metrics,
     load_posts,
     load_themes,
     next_post_number,
     sanitize_quiet_workflow_text,
     validate_quiet_workflow_posts,
+    write_metrics_summary_markdown,
     write_posts_markdown,
 )
 
@@ -90,6 +95,63 @@ def test_append_load_posts_and_next_post_number(tmp_path):
 
     assert [post.post_id for post in loaded] == ["QW-0001", "QW-0002"]
     assert next_post_number(loaded) == 3
+
+
+def test_build_append_load_metric_and_rates(tmp_path):
+    metrics_path = tmp_path / "metrics.csv"
+    post = generate_quiet_workflow_posts(
+        make_theme(),
+        count=1,
+        created_at=datetime(2026, 5, 9, 9, 0),
+    )[0]
+    metric = build_post_metric(
+        post,
+        impressions=1000,
+        engagements=45,
+        saves=12,
+        notes="保存率が高め",
+        posted_at=datetime(2026, 5, 10, 9, 0),
+    )
+
+    append_metric(metric, metrics_path)
+    loaded = load_metrics(metrics_path)
+
+    assert loaded == [metric]
+    assert loaded[0].engagement_rate == 0.045
+    assert loaded[0].save_rate == 0.012
+
+
+def test_write_metrics_summary_markdown_sorts_by_save_rate(tmp_path):
+    posts = generate_quiet_workflow_posts(
+        make_theme(),
+        count=2,
+        created_at=datetime(2026, 5, 9, 9, 0),
+    )
+    first = build_post_metric(
+        posts[0],
+        impressions=1000,
+        engagements=50,
+        saves=10,
+        posted_at=datetime(2026, 5, 10, 9, 0),
+    )
+    second = build_post_metric(
+        posts[1],
+        impressions=100,
+        engagements=8,
+        saves=5,
+        notes="静かな保存が多い",
+        posted_at=datetime(2026, 5, 10, 10, 0),
+    )
+    output_path = tmp_path / "metrics_summary.md"
+
+    saved_path = write_metrics_summary_markdown([first, second], output_path)
+    text = output_path.read_text(encoding="utf-8")
+
+    assert saved_path == output_path
+    assert format_metrics_summary_markdown([first, second]) == text
+    assert text.index("QW-0002") < text.index("QW-0001")
+    assert "5.0%" in text
+    assert "静かな保存が多い" in text
 
 
 def test_write_posts_markdown(tmp_path):

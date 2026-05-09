@@ -30,14 +30,20 @@ from affiliate_os.quiet_workflow import (
     DEFAULT_POSTS_OUTPUT_DIR,
     DEFAULT_POSTS_PATH,
     DEFAULT_THEMES_PATH,
+    append_metric,
     append_posts,
+    build_post_metric,
     ensure_quiet_workflow_csvs,
+    find_post,
     find_theme,
+    format_metrics_summary_markdown,
     generate_quiet_workflow_posts,
+    load_metrics,
     load_posts,
     load_themes,
     next_post_number,
     validate_quiet_workflow_posts,
+    write_metrics_summary_markdown,
     write_posts_markdown,
 )
 from affiliate_os.reviews import (
@@ -403,6 +409,74 @@ def generate_posts_command(
     console.print("[yellow]自動投稿はしません。公開前に文脈、事実関係、画像意図を確認してください。[/yellow]")
 
 
+@app.command("record-post-metrics")
+def record_post_metrics_command(
+    post_id: str = typer.Argument(..., help="記録する投稿ID。例: QW-0001"),
+    impressions: int = typer.Option(..., "--impressions", min=0, help="表示回数"),
+    engagements: int = typer.Option(..., "--engagements", min=0, help="反応数"),
+    saves: int = typer.Option(0, "--saves", min=0, help="保存数"),
+    notes: str = typer.Option("", "--notes", help="振り返りメモ"),
+    posted_at: str | None = typer.Option(
+        None,
+        "--posted-at",
+        help="投稿日。ISO形式。未指定時は現在時刻",
+    ),
+    posts_path: Path = typer.Option(
+        DEFAULT_POSTS_PATH,
+        "--posts-path",
+        help="posts.csv の読み込み先",
+    ),
+    metrics_path: Path = typer.Option(
+        DEFAULT_METRICS_PATH,
+        "--metrics-path",
+        help="metrics.csv の追記先",
+    ),
+) -> None:
+    """Quiet Workflow投稿の指標をmetrics.csvに追記します。"""
+    ensure_quiet_workflow_csvs(posts_path=posts_path, metrics_path=metrics_path)
+    post = find_post(load_posts(posts_path), post_id)
+    if post is None:
+        console.print(f"[yellow]投稿IDが見つかりません: {post_id}[/yellow]")
+        return
+    metric = build_post_metric(
+        post,
+        impressions=impressions,
+        engagements=engagements,
+        saves=saves,
+        notes=notes,
+        posted_at=parse_optional_datetime(posted_at),
+    )
+    append_metric(metric, metrics_path)
+    console.print(f"[green]投稿指標を記録しました: {metrics_path}[/green]")
+    console.print(
+        "[green]"
+        f"engagement_rate={metric.engagement_rate:.1%} / save_rate={metric.save_rate:.1%}"
+        "[/green]"
+    )
+
+
+@app.command("summarize-post-metrics")
+def summarize_post_metrics_command(
+    metrics_path: Path = typer.Option(
+        DEFAULT_METRICS_PATH,
+        "--metrics-path",
+        help="metrics.csv の読み込み先",
+    ),
+    output_path: Path | None = typer.Option(
+        None,
+        "--output-path",
+        help="Markdown保存先。未指定時は画面表示のみ",
+    ),
+) -> None:
+    """Quiet Workflow投稿指標を保存率と反応率で振り返ります。"""
+    metrics = load_metrics(metrics_path)
+    markdown = format_metrics_summary_markdown(metrics)
+    console.print(markdown)
+    if output_path:
+        saved_path = write_metrics_summary_markdown(metrics, output_path)
+        console.print(f"[green]投稿指標サマリーを保存しました: {saved_path}[/green]")
+
+
 @app.command("generate-content-reviews")
 def generate_content_reviews_command(
     offer_id: str | None = typer.Option(None, "--offer-id", help="特定の案件IDだけ生成"),
@@ -660,6 +734,15 @@ def parse_review_output_format(value: str) -> str:
     if normalized not in {"csv", "markdown"}:
         raise typer.BadParameter("出力形式は csv または markdown を指定してください。")
     return normalized
+
+
+def parse_optional_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise typer.BadParameter("日時はISO形式で指定してください。例: 2026-05-09T09:00:00") from exc
 
 
 def parse_min_reward(value: str | None) -> Decimal | None:
