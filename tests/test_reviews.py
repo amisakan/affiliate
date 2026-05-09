@@ -5,13 +5,17 @@ import pytest
 from affiliate_os.content import generate_note_article_for_offer, generate_x_post_for_offer
 from affiliate_os.models import Offer
 from affiliate_os.reviews import (
+    approved_content_reviews,
     build_content_reviews,
     content_preview,
+    format_approved_content_markdown,
     format_content_reviews_markdown,
     load_content_reviews_csv,
     normalize_review_status,
     update_content_review,
     update_content_review_csv,
+    write_approved_content_csv,
+    write_approved_content_markdown,
     write_content_reviews_csv,
     write_content_reviews_markdown,
 )
@@ -177,6 +181,81 @@ def test_update_content_review_csv_writes_updated_rows(tmp_path):
     assert result.updated
     assert loaded[0].status == "rejected"
     assert loaded[0].reviewer_comment == "条件確認が必要"
+
+
+def test_approved_content_reviews_filters_and_sorts_approved_rows():
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    note_article = generate_note_article_for_offer(offer)
+    reviews = build_content_reviews(
+        [x_post],
+        [note_article],
+        reviewed_at=datetime(2026, 5, 8, 14, 0),
+    )
+    first_update = update_content_review(
+        reviews,
+        review_id="x_post:OFF-0001",
+        status="approved",
+        reviewer_comment="公開候補",
+        reviewed_at=datetime(2026, 5, 8, 15, 0),
+    )
+    second_update = update_content_review(
+        first_update.reviews,
+        review_id="note_article:OFF-0001",
+        status="approved",
+        reviewer_comment="記事候補",
+        reviewed_at=datetime(2026, 5, 8, 16, 0),
+    )
+
+    approved = approved_content_reviews(second_update.reviews)
+
+    assert [review.review_id for review in approved] == [
+        "note_article:OFF-0001",
+        "x_post:OFF-0001",
+    ]
+    assert all(review.status == "approved" for review in approved)
+
+
+def test_write_approved_content_csv_only_writes_approved_rows(tmp_path):
+    offer = make_offer()
+    x_post = generate_x_post_for_offer(offer)
+    note_article = generate_note_article_for_offer(offer)
+    reviews = build_content_reviews([x_post], [note_article])
+    result = update_content_review(
+        reviews,
+        review_id="x_post:OFF-0001",
+        status="approved",
+    )
+    output_path = tmp_path / "approved_content.csv"
+
+    saved_path = write_approved_content_csv(result.reviews, output_path)
+    text = output_path.read_text(encoding="utf-8")
+
+    assert saved_path == output_path
+    assert "x_post:OFF-0001" in text
+    assert "note_article:OFF-0001" not in text
+
+
+def test_write_approved_content_markdown(tmp_path):
+    offer = make_offer()
+    note_article = generate_note_article_for_offer(offer)
+    reviews = build_content_reviews([], [note_article])
+    result = update_content_review(
+        reviews,
+        review_id="note_article:OFF-0001",
+        status="approved",
+        reviewer_comment="公開前にLP条件を確認する",
+    )
+    output_path = tmp_path / "approved_content.md"
+
+    saved_path = write_approved_content_markdown(result.reviews, output_path)
+    text = output_path.read_text(encoding="utf-8")
+
+    assert saved_path == output_path
+    assert format_approved_content_markdown(result.reviews) == text
+    assert "# Approved Content" in text
+    assert "note_article:OFF-0001" in text
+    assert "公開前にLP条件を確認する" in text
 
 
 def test_write_content_reviews_markdown(tmp_path):

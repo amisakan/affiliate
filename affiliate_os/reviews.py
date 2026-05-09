@@ -9,6 +9,12 @@ from affiliate_os.content import NoteArticleDraft, XPostDraft
 
 DEFAULT_CONTENT_REVIEWS_OUTPUT_PATH = Path("outputs") / "generated" / "content_reviews.csv"
 DEFAULT_CONTENT_REVIEWS_MARKDOWN_PATH = Path("outputs") / "generated" / "content_reviews.md"
+DEFAULT_APPROVED_CONTENT_OUTPUT_PATH = (
+    Path("outputs") / "generated" / "approved_content.csv"
+)
+DEFAULT_APPROVED_CONTENT_MARKDOWN_PATH = (
+    Path("outputs") / "generated" / "approved_content.md"
+)
 REVIEW_STATUSES = ("draft", "approved", "needs_revision", "rejected", "on_hold")
 DEFAULT_REVIEW_STATUS = "draft"
 REVIEW_COLUMNS = [
@@ -243,6 +249,76 @@ def update_content_review_csv(
     if result.updated:
         write_content_reviews_csv(result.reviews, output_path or input_path)
     return result
+
+
+def approved_content_reviews(reviews: list[ContentReview]) -> list[ContentReview]:
+    approved = [review for review in reviews if review.status == "approved"]
+    return sorted(
+        approved,
+        key=lambda review: (
+            review.reviewed_at,
+            review.offer_id,
+            review.content_type,
+        ),
+        reverse=True,
+    )
+
+
+def write_approved_content_csv(
+    reviews: list[ContentReview],
+    output_path: Path = DEFAULT_APPROVED_CONTENT_OUTPUT_PATH,
+) -> Path:
+    return write_content_reviews_csv(approved_content_reviews(reviews), output_path)
+
+
+def write_approved_content_markdown(
+    reviews: list[ContentReview],
+    output_path: Path = DEFAULT_APPROVED_CONTENT_MARKDOWN_PATH,
+) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(format_approved_content_markdown(reviews), encoding="utf-8")
+    return output_path
+
+
+def format_approved_content_markdown(reviews: list[ContentReview]) -> str:
+    approved = approved_content_reviews(reviews)
+    lines = [
+        "# Approved Content",
+        "",
+        "| Review ID | Type | Offer | Score | Recommendation | Reviewed At |",
+        "| --- | --- | --- | ---: | --- | --- |",
+    ]
+    if not approved:
+        lines.append("| - | - | no approved content | - | - | - |")
+        return "\n".join(lines) + "\n"
+
+    for review in approved:
+        score = "-" if review.score is None else str(review.score)
+        lines.append(
+            "| "
+            f"{review.review_id} | "
+            f"{review.content_type} | "
+            f"{review.offer_id} | "
+            f"{score} | "
+            f"{review.recommendation or '-'} | "
+            f"{review.reviewed_at.isoformat(timespec='seconds')} |"
+        )
+    lines.extend(["", "## Publishing Notes", ""])
+    for review in approved:
+        comment = review.reviewer_comment or "最終公開前に公式条件を確認する"
+        lines.extend(
+            [
+                f"### {review.review_id}",
+                "",
+                f"- 案件名: {review.offer_name}",
+                f"- タイトル: {review.title}",
+                f"- コンプライアンス: {review.compliance_status}",
+                f"- コメント: {comment}",
+                f"- プレビュー: {review.content_preview}",
+                "",
+            ]
+        )
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def parse_optional_int(value: str) -> int | None:
