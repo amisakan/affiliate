@@ -25,6 +25,21 @@ from affiliate_os.importers.reviewer import (
 )
 from affiliate_os.importers.vision_importer import extract_offer_from_image
 from affiliate_os.models import Offer
+from affiliate_os.quiet_workflow import (
+    DEFAULT_METRICS_PATH,
+    DEFAULT_POSTS_OUTPUT_DIR,
+    DEFAULT_POSTS_PATH,
+    DEFAULT_THEMES_PATH,
+    append_posts,
+    ensure_quiet_workflow_csvs,
+    find_theme,
+    generate_quiet_workflow_posts,
+    load_posts,
+    load_themes,
+    next_post_number,
+    validate_quiet_workflow_posts,
+    write_posts_markdown,
+)
 from affiliate_os.reviews import (
     DEFAULT_APPROVED_CONTENT_MARKDOWN_PATH,
     DEFAULT_APPROVED_CONTENT_OUTPUT_PATH,
@@ -327,6 +342,62 @@ def generate_content_pack_command(
         template=template,
     )
     render_content_pack(pack)
+
+
+@app.command("generate-posts")
+def generate_posts_command(
+    theme_id: str = typer.Option(..., "--theme", help="投稿テーマID。例: 001"),
+    count: int = typer.Option(5, "--count", min=1, help="生成する投稿案の数"),
+    themes_path: Path = typer.Option(
+        DEFAULT_THEMES_PATH,
+        "--themes-path",
+        help="themes.csv の読み込み先",
+    ),
+    posts_path: Path = typer.Option(
+        DEFAULT_POSTS_PATH,
+        "--posts-path",
+        help="posts.csv の追記先",
+    ),
+    metrics_path: Path = typer.Option(
+        DEFAULT_METRICS_PATH,
+        "--metrics-path",
+        help="metrics.csv の確認先",
+    ),
+    output_dir: Path = typer.Option(
+        DEFAULT_POSTS_OUTPUT_DIR,
+        "--output-dir",
+        help="Markdown投稿案の保存先ディレクトリ",
+    ),
+) -> None:
+    """Quiet Workflow向けのX投稿案と画像生成プロンプトを作成します。"""
+    ensure_quiet_workflow_csvs(
+        themes_path=themes_path,
+        posts_path=posts_path,
+        metrics_path=metrics_path,
+    )
+    themes = load_themes(themes_path)
+    theme = find_theme(themes, theme_id)
+    if theme is None:
+        console.print(f"[yellow]テーマIDが見つかりません: {theme_id}[/yellow]")
+        return
+
+    existing_posts = load_posts(posts_path)
+    drafts = generate_quiet_workflow_posts(
+        theme,
+        count=count,
+        starting_number=next_post_number(existing_posts),
+    )
+    warnings = validate_quiet_workflow_posts(drafts)
+    if warnings:
+        for warning in warnings:
+            console.print(f"[yellow]{warning}[/yellow]")
+        raise typer.Exit(code=1)
+
+    append_posts(drafts, posts_path)
+    markdown_path = write_posts_markdown(drafts, output_dir)
+    console.print(f"[green]Quiet Workflow投稿案を保存しました: {markdown_path}[/green]")
+    console.print(f"[green]posts.csv に追記しました: {posts_path}[/green]")
+    console.print("[yellow]自動投稿はしません。公開前に文脈、事実関係、画像意図を確認してください。[/yellow]")
 
 
 @app.command("generate-content-reviews")

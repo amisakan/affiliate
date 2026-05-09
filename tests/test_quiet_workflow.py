@@ -1,0 +1,120 @@
+from datetime import datetime
+
+from affiliate_os.quiet_workflow import (
+    METRIC_COLUMNS,
+    POST_COLUMNS,
+    THEME_COLUMNS,
+    QuietWorkflowTheme,
+    append_posts,
+    ensure_quiet_workflow_csvs,
+    find_theme,
+    format_posts_markdown,
+    generate_quiet_workflow_posts,
+    load_posts,
+    load_themes,
+    next_post_number,
+    sanitize_quiet_workflow_text,
+    validate_quiet_workflow_posts,
+    write_posts_markdown,
+)
+
+
+def make_theme() -> QuietWorkflowTheme:
+    return QuietWorkflowTheme(
+        theme_id="001",
+        title="静かなAIワークフローの作り方",
+        focus="AI, Workflow, Research, Deep Work, 情報整理",
+        keywords="AI|Workflow|Research|Deep Work|情報整理",
+        audience="静かに仕事の質を整えたい人",
+        memo="余白のある投稿にする",
+    )
+
+
+def test_ensure_quiet_workflow_csvs_creates_required_headers(tmp_path):
+    themes_path = tmp_path / "data" / "themes.csv"
+    posts_path = tmp_path / "data" / "posts.csv"
+    metrics_path = tmp_path / "data" / "metrics.csv"
+
+    ensure_quiet_workflow_csvs(themes_path, posts_path, metrics_path)
+
+    assert themes_path.read_text(encoding="utf-8").strip() == ",".join(THEME_COLUMNS)
+    assert posts_path.read_text(encoding="utf-8").strip() == ",".join(POST_COLUMNS)
+    assert metrics_path.read_text(encoding="utf-8").strip() == ",".join(METRIC_COLUMNS)
+
+
+def test_load_themes_and_find_theme(tmp_path):
+    themes_path = tmp_path / "themes.csv"
+    themes_path.write_text(
+        ",".join(THEME_COLUMNS)
+        + "\n"
+        + "001,静かなAIワークフロー,AIと情報整理,AI|Workflow,研究者,余白を残す\n",
+        encoding="utf-8",
+    )
+
+    themes = load_themes(themes_path)
+
+    assert len(themes) == 1
+    assert find_theme(themes, "001") == themes[0]
+    assert find_theme(themes, "999") is None
+
+
+def test_generate_quiet_workflow_posts_creates_required_fields():
+    created_at = datetime(2026, 5, 9, 9, 0)
+    posts = generate_quiet_workflow_posts(
+        make_theme(),
+        count=3,
+        starting_number=7,
+        created_at=created_at,
+    )
+
+    assert [post.post_id for post in posts] == ["QW-0007", "QW-0008", "QW-0009"]
+    assert all(post.theme_id == "001" for post in posts)
+    assert all(post.post_text for post in posts)
+    assert all(post.image_concept for post in posts)
+    assert all("Black background" in post.image_prompt for post in posts)
+    assert all("収益や成果を約束しない" in post.risk_notes for post in posts)
+    assert all(post.created_at == created_at for post in posts)
+    assert validate_quiet_workflow_posts(posts) == []
+
+
+def test_append_load_posts_and_next_post_number(tmp_path):
+    posts_path = tmp_path / "posts.csv"
+    posts = generate_quiet_workflow_posts(
+        make_theme(),
+        count=2,
+        created_at=datetime(2026, 5, 9, 9, 0),
+    )
+
+    append_posts(posts, posts_path)
+    loaded = load_posts(posts_path)
+
+    assert [post.post_id for post in loaded] == ["QW-0001", "QW-0002"]
+    assert next_post_number(loaded) == 3
+
+
+def test_write_posts_markdown(tmp_path):
+    posts = generate_quiet_workflow_posts(
+        make_theme(),
+        count=1,
+        created_at=datetime(2026, 5, 9, 9, 0),
+    )
+
+    saved_path = write_posts_markdown(posts, tmp_path)
+    text = saved_path.read_text(encoding="utf-8")
+
+    assert saved_path.parent == tmp_path
+    assert format_posts_markdown(posts) == text
+    assert "# Quiet Workflow Post Drafts" in text
+    assert "### Image Prompt" in text
+    assert "自動投稿" not in text
+
+
+def test_sanitize_quiet_workflow_text_removes_forbidden_phrases():
+    text = "誰でも簡単に稼げる。絶対に月100万円確定。"
+
+    sanitized = sanitize_quiet_workflow_text(text)
+
+    assert "誰でも簡単" not in sanitized
+    assert "稼げる" not in sanitized
+    assert "絶対" not in sanitized
+    assert "月100万円確定" not in sanitized
